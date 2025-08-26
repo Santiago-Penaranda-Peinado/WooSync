@@ -22,7 +22,7 @@ def main():
     """Función principal del script."""
     print("Iniciando WooSync...")
     
-    # --- CAMBIO: Pedimos credenciales de usuario ---
+    # --- Pedimos credenciales de usuario ---
     store_url = input("Introduce la URL de tu tienda (ej. https://tienda.com): ")
     username = input("Introduce tu nombre de usuario de WordPress: ")
     app_password = getpass.getpass("Pega tu Contraseña de Aplicación: ")
@@ -38,13 +38,13 @@ def main():
     if products_df is None:
         return
         
-    # --- NUEVO: Pedir la carpeta de imágenes ---
+    # ---  Pedir la carpeta de imágenes ---
     image_folder_path = input("Introduce la ruta a la carpeta que contiene tus imágenes: ")
     if not os.path.isdir(image_folder_path):
         print("La ruta proporcionada no es una carpeta válida. Operación cancelada.")
         return
 
-    # --- CONFIRMACIÓN DE SEGURIDAD (sin cambios) ---
+ 
     num_products_to_process = 1
     print(f"\nATENCIÓN: Este script está a punto de modificar datos en tu tienda.")
     print(f"Se procesará el PRIMER producto del archivo CSV.")
@@ -93,7 +93,7 @@ def main():
         if image_id:
             product_data['images'] = [{'id': image_id}]
 
-        # --- Lógica de Creación/Actualización (sin cambios) ---
+
         existing_product = api.get_product_by_sku(sku)
         
         if existing_product:
