@@ -1,30 +1,24 @@
 # src/api_client.py
 
 import requests
+from requests.auth import HTTPBasicAuth
 
 class WooCommerceAPI:
     """
     Gestiona toda la comunicación con la API REST de WooCommerce.
     """
-    def __init__(self, base_url, consumer_key, consumer_secret):
-        """
-        Inicializa el cliente de la API.
-
-        Args:
-            base_url (str): La URL de tu tienda (ej. "https://tienda.com").
-            consumer_key (str): La clave de consumidor de la API de WooCommerce.
-            consumer_secret (str): El secreto de consumidor de la API de WooCommerce.
-        """
+    def __init__(self, base_url, username, app_password):
         self.base_url = f"{base_url}/wp-json/wc/v3"
-        self.auth = (consumer_key, consumer_secret)
+        self.wp_base_url = f"{base_url}/wp-json/wp/v2"
+        # Usamos HTTPBasicAuth con el usuario y la contraseña de aplicación
+        self.auth = HTTPBasicAuth(username, app_password)
+        self.headers = {'Content-Type': 'application/json'}
 
     def check_connection(self):
-        """
-        Verifica si la conexión y las credenciales con la API son correctas.
-        """
+        """Verifica si la conexión y las credenciales con la API son correctas."""
         try:
+            # Usamos self.auth que ahora es HTTPBasicAuth
             response = requests.get(f"{self.base_url}/products", auth=self.auth, params={'per_page': 1})
-            # Lanza un error si la respuesta es 4xx o 5xx
             response.raise_for_status()
             print("¡Conexión con la API de WooCommerce exitosa!")
             return True
@@ -35,23 +29,77 @@ class WooCommerceAPI:
             return False
 
     def get_product_by_sku(self, sku):
-        """
-        Busca un producto en WooCommerce por su SKU.
-
-        Args:
-            sku (str): El SKU del producto a buscar.
-
-        Returns:
-            dict: Los datos del producto si se encuentra, o None si no se encuentra.
-        """
+        """Busca un producto en WooCommerce por su SKU."""
         try:
             response = requests.get(f"{self.base_url}/products", auth=self.auth, params={'sku': sku})
             response.raise_for_status()
             products = response.json()
-            # Si la lista de productos no está vacía, devuelve el primero
-            if products:
-                return products[0]
-            return None
+            return products[0] if products else None
         except requests.exceptions.RequestException as e:
             print(f"Error al buscar el producto con SKU {sku}: {e}")
+            return None
+
+    def create_product(self, product_data):
+        """Crea un nuevo producto en WooCommerce."""
+        try:
+            response = requests.post(
+                f"{self.base_url}/products",
+                auth=self.auth,
+                headers=self.headers,
+                json=product_data
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error al CREAR el producto: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Detalles del error: {e.response.text}")
+            return None
+
+    def update_product(self, product_id, product_data):
+        """Actualiza un producto existente en WooCommerce."""
+        try:
+            response = requests.put(
+                f"{self.base_url}/products/{product_id}",
+                auth=self.auth,
+                headers=self.headers,
+                json=product_data
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error al ACTUALIZAR el producto con ID {product_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Detalles del error: {e.response.text}")
+            return None
+
+    def upload_image(self, image_path, image_name):
+        """
+        Sube una imagen a la Biblioteca de Medios de WordPress.
+        Usa autenticación HTTP Basic Auth.
+        """
+        media_url = f"{self.wp_base_url}/media"
+        
+        try:
+            with open(image_path, 'rb') as f:
+                headers = {
+                    'Content-Disposition': f'attachment; filename={image_name}'
+                }
+                # Usamos self.auth (HTTPBasicAuth) en lugar de parámetros de query string
+                response = requests.post(
+                    media_url,
+                    auth=self.auth,
+                    headers=headers,
+                    files={'file': (image_name, f)}
+                )
+            response.raise_for_status()
+            print(f"  -> Imagen '{image_name}' subida exitosamente.")
+            return response.json()
+        except FileNotFoundError:
+            print(f"  -> ERROR: No se encontró el archivo de imagen en la ruta: {image_path}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"  -> ERROR al subir la imagen: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"  -> Detalles del error: {e.response.text}")
             return None
