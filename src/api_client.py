@@ -10,14 +10,12 @@ class WooCommerceAPI:
     def __init__(self, base_url, username, app_password):
         self.base_url = f"{base_url}/wp-json/wc/v3"
         self.wp_base_url = f"{base_url}/wp-json/wp/v2"
-        # Usamos HTTPBasicAuth con el usuario y la contraseña de aplicación
         self.auth = HTTPBasicAuth(username, app_password)
         self.headers = {'Content-Type': 'application/json'}
 
     def check_connection(self):
         """Verifica si la conexión y las credenciales con la API son correctas."""
         try:
-            # Usamos self.auth que ahora es HTTPBasicAuth
             response = requests.get(f"{self.base_url}/products", auth=self.auth, params={'per_page': 1})
             response.raise_for_status()
             print("¡Conexión con la API de WooCommerce exitosa!")
@@ -29,7 +27,7 @@ class WooCommerceAPI:
             return False
 
     def get_product_by_sku(self, sku):
-        """Busca un producto en WooCommerce por su SKU."""
+        """Busca un producto en WooCommerce por su SKU. (Uso limitado en modo batch)"""
         try:
             response = requests.get(f"{self.base_url}/products", auth=self.auth, params={'sku': sku})
             response.raise_for_status()
@@ -40,7 +38,7 @@ class WooCommerceAPI:
             return None
 
     def create_product(self, product_data):
-        """Crea un nuevo producto en WooCommerce."""
+        """Crea un nuevo producto en WooCommerce. (Método individual)"""
         try:
             response = requests.post(
                 f"{self.base_url}/products",
@@ -57,7 +55,7 @@ class WooCommerceAPI:
             return None
 
     def update_product(self, product_id, product_data):
-        """Actualiza un producto existente en WooCommerce."""
+        """Actualiza un producto existente en WooCommerce. (Método individual)"""
         try:
             response = requests.put(
                 f"{self.base_url}/products/{product_id}",
@@ -73,11 +71,45 @@ class WooCommerceAPI:
                 print(f"Detalles del error: {e.response.text}")
             return None
 
+    # --- NUEVO MÉTODO PARA PROCESAMIENTO POR LOTES ---
+    def process_batch(self, batch_data):
+        """
+        Procesa un lote de productos para crear, actualizar o eliminar.
+        Espera un diccionario: {'create': [...], 'update': [...]}
+        """
+        # Verificamos si hay algo que enviar para no hacer llamadas vacías
+        if not batch_data.get('create') and not batch_data.get('update') and not batch_data.get('delete'):
+            print("Lote vacío. No se envía nada a la API.")
+            return None
+        
+        try:
+            response = requests.post(
+                f"{self.base_url}/products/batch",
+                auth=self.auth,
+                headers=self.headers,
+                json=batch_data
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            # Preparamos un error detallado para que la GUI lo muestre
+            error_details = f"Error al procesar el lote: {e}"
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    # Intentamos decodificar el JSON del error para un mensaje más limpio
+                    error_json = e.response.json()
+                    message = error_json.get('message', e.response.text)
+                    error_details += f" | Mensaje de la API: {message}"
+                except ValueError:
+                    # Si la respuesta de error no es JSON
+                    error_details += f" | Respuesta del servidor: {e.response.text}"
+            
+            # Devolvemos un diccionario de error para que la GUI sepa que algo salió mal
+            return {'error': error_details}
+
+
     def upload_image(self, image_path, image_name):
-        """
-        Sube una imagen a la Biblioteca de Medios de WordPress.
-        Usa autenticación HTTP Basic Auth.
-        """
+        """Sube una imagen a la Biblioteca de Medios de WordPress."""
         media_url = f"{self.wp_base_url}/media"
         
         try:
@@ -85,7 +117,6 @@ class WooCommerceAPI:
                 headers = {
                     'Content-Disposition': f'attachment; filename={image_name}'
                 }
-                # Usamos self.auth (HTTPBasicAuth) en lugar de parámetros de query string
                 response = requests.post(
                     media_url,
                     auth=self.auth,
@@ -93,16 +124,16 @@ class WooCommerceAPI:
                     files={'file': (image_name, f)}
                 )
             response.raise_for_status()
-            print(f"  -> Imagen '{image_name}' subida exitosamente.")
+            # Devolvemos el JSON completo para que la GUI pueda registrarlo si es necesario
             return response.json()
         except FileNotFoundError:
-            print(f"  -> ERROR: No se encontró el archivo de imagen en la ruta: {image_path}")
-            return None
+            # Devolvemos un diccionario de error consistente
+            return {'error': f"No se encontró el archivo de imagen en la ruta: {image_path}"}
         except requests.exceptions.RequestException as e:
-            print(f"  -> ERROR al subir la imagen: {e}")
+            error_details = f"Error al subir la imagen '{image_name}': {e}"
             if hasattr(e, 'response') and e.response is not None:
-                print(f"  -> Detalles del error: {e.response.text}")
-            return None
+                 error_details += f" | Detalles: {e.response.text}"
+            return {'error': error_details}
 
     def get_all_products(self):
         """
@@ -115,7 +146,7 @@ class WooCommerceAPI:
         
         while True:
             try:
-                params = {'per_page': per_page, 'page': page}
+                params = {'per_page': per_page, 'page': page, 'status': 'any'} # 'status=any' para obtener también borradores, etc.
                 response = requests.get(f"{self.base_url}/products", auth=self.auth, params=params)
                 response.raise_for_status()
                 products = response.json()
@@ -124,6 +155,11 @@ class WooCommerceAPI:
                     break # Si no hay más productos, salimos del bucle
                 
                 all_products.extend(products)
+
+                # Si la respuesta tiene menos productos que el máximo por página, es la última página.
+                if len(products) < per_page:
+                    break
+                
                 page += 1
             except requests.exceptions.RequestException as e:
                 print(f"Error al obtener la página {page} de productos: {e}")
@@ -132,15 +168,7 @@ class WooCommerceAPI:
         return all_products
 
     def delete_product(self, product_id):
-        """
-        Elimina permanentemente un producto por su ID.
-        
-        Args:
-            product_id (int): El ID del producto a eliminar.
-            
-        Returns:
-            bool: True si se eliminó con éxito, False si no.
-        """
+        """Elimina permanentemente un producto por su ID."""
         try:
             # force=true es para eliminar permanentemente en vez de enviar a la papelera
             response = requests.delete(f"{self.base_url}/products/{product_id}", auth=self.auth, params={'force': True})
