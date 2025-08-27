@@ -47,7 +47,7 @@ class App(customtkinter.CTk):
         self.status_label.pack(pady=10)
 
     def connect_to_store(self):
-        store_url = self.url_entry.get()
+        store_url = self.url_entry.get().strip().rstrip('/')
         username = self.user_entry.get()
         password = self.password_entry.get()
         if not all([store_url, username, password]):
