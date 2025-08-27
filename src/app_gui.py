@@ -4,7 +4,7 @@ import customtkinter
 from tkinter import filedialog
 import pandas as pd
 import os
-import threading # <-- Importante para no congelar la interfaz
+import threading
 from api_client import WooCommerceAPI
 
 customtkinter.set_appearance_mode("System")
@@ -15,14 +15,14 @@ class App(customtkinter.CTk):
         super().__init__()
 
         self.title("WooSync - Sincronizador para WooCommerce")
-        self.geometry("700x650")
+        self.geometry("700x700") # Un poco más de altura para el nuevo botón
 
         # --- Variables de estado ---
         self.api_client = None
         self.csv_path = ""
         self.image_folder_path = ""
         self.mapping_widgets = []
-        self.is_syncing = False # Para evitar doble clic
+        self.is_syncing = False
 
         # --- Marcos (pantallas) ---
         self.login_frame = customtkinter.CTkFrame(self)
@@ -31,7 +31,7 @@ class App(customtkinter.CTk):
         self.create_login_widgets()
         self.login_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-    
+    # ... (create_login_widgets y connect_to_store no tienen cambios)
     def create_login_widgets(self):
         welcome_label = customtkinter.CTkLabel(self.login_frame, text="Conectar a la Tienda", font=("Arial", 20))
         welcome_label.pack(pady=20)
@@ -64,34 +64,53 @@ class App(customtkinter.CTk):
             self.api_client = None
             self.status_label.configure(text="Error: Revisa la URL y las credenciales.", text_color="red")
 
+
     def create_main_widgets(self):
+        """Crea los componentes de la pantalla principal."""
         
         file_frame = customtkinter.CTkFrame(self.main_frame)
         file_frame.pack(pady=10, padx=10, fill="x")
-        self.csv_path_label = customtkinter.CTkLabel(file_frame, text="Paso 1: Selecciona el archivo CSV")
-        self.csv_path_label.pack()
-        csv_button = customtkinter.CTkButton(file_frame, text="Seleccionar Archivo CSV", command=self.select_csv_file)
+        
+        # --- Marco para la plantilla ---
+        template_frame = customtkinter.CTkFrame(file_frame)
+        template_frame.pack(side="left", padx=20, pady=10, expand=True)
+        template_label = customtkinter.CTkLabel(template_frame, text="¿Empezando desde cero?")
+        template_label.pack()
+        template_button = customtkinter.CTkButton(template_frame, text="Descargar Plantilla Simplificada", command=self.download_template)
+        template_button.pack(pady=5)
+
+        # --- Marco para subir archivos existentes ---
+        upload_frame = customtkinter.CTkFrame(file_frame)
+        upload_frame.pack(side="left", padx=20, pady=10, expand=True)
+        upload_label = customtkinter.CTkLabel(upload_frame, text="¿Ya tienes un archivo?")
+        upload_label.pack()
+        csv_button = customtkinter.CTkButton(upload_frame, text="Seleccionar Archivo CSV", command=self.select_csv_file)
         csv_button.pack(pady=5)
-        self.image_folder_label = customtkinter.CTkLabel(file_frame, text="Paso 2: Selecciona la carpeta de imágenes")
-        self.image_folder_label.pack()
-        image_button = customtkinter.CTkButton(file_frame, text="Seleccionar Carpeta de Imágenes", command=self.select_image_folder)
+
+        self.image_folder_label = customtkinter.CTkLabel(self.main_frame, text="Paso 2: Selecciona la carpeta de imágenes")
+        self.image_folder_label.pack(pady=10)
+        image_button = customtkinter.CTkButton(self.main_frame, text="Seleccionar Carpeta de Imágenes", command=self.select_image_folder)
         image_button.pack(pady=5)
+
         presets_frame = customtkinter.CTkFrame(self.main_frame)
-        presets_frame.pack(pady=10, padx=10, fill="x")
+        presets_frame.pack(pady=5, padx=10, fill="x")
         presets_label = customtkinter.CTkLabel(presets_frame, text="Plantillas de Mapeo Rápido:")
         presets_label.pack(side="left", padx=10)
         basic_button = customtkinter.CTkButton(presets_frame, text="Básico", command=self.apply_basic_mapping)
         basic_button.pack(side="left", padx=5)
         clear_button = customtkinter.CTkButton(presets_frame, text="Limpiar Todo", command=self.clear_mapping)
         clear_button.pack(side="left", padx=5)
+
         self.mapping_frame = customtkinter.CTkScrollableFrame(self.main_frame, label_text="Paso 3: Mapea las columnas")
         self.mapping_frame.pack(pady=10, padx=10, fill="both", expand=True)
+        
         sync_frame = customtkinter.CTkFrame(self.main_frame)
         sync_frame.pack(pady=10, padx=10, fill="x")
         self.start_sync_button = customtkinter.CTkButton(sync_frame, text="Iniciar Sincronización", command=self.start_synchronization_thread)
         self.start_sync_button.pack(pady=10)
+        
         self.log_textbox = customtkinter.CTkTextbox(self.main_frame, height=150)
-        self.log_textbox.pack(pady=10, padx=10, fill="x", expand=True)
+        self.log_textbox.pack(pady=10, padx=10, fill="both", expand=True)
 
 
     def select_csv_file(self):
@@ -99,16 +118,18 @@ class App(customtkinter.CTk):
         filepath = filedialog.askopenfilename(filetypes=(("Archivos CSV", "*.csv"), ("Todos los archivos", "*.*")))
         if not filepath: return
         self.csv_path = filepath
+        # Mostramos solo el nombre del archivo, no la ruta completa
         filename = os.path.basename(filepath)
-        self.csv_path_label.configure(text=f"Archivo: {filename}")
+        upload_label = self.main_frame.winfo_children()[0].winfo_children()[1].winfo_children()[0]
+        upload_label.configure(text=f"Archivo: {filename}")
         try:
             df_headers = pd.read_csv(self.csv_path, nrows=0).columns.tolist()
             self.create_mapping_widgets(df_headers)
         except Exception as e:
-            self.log_textbox.insert("end", f"Error al leer el CSV: {e}\n")
+            self.log(f"Error al leer el CSV: {e}")
 
     def select_image_folder(self):
-       
+        
         folderpath = filedialog.askdirectory()
         if not folderpath: return
         self.image_folder_path = folderpath
@@ -138,7 +159,7 @@ class App(customtkinter.CTk):
 
     def apply_basic_mapping(self):
        
-        essential_fields = ["Name", "SKU", "Regular price", "Images"]
+        essential_fields = ["Name", "SKU", "Regular price", "Images", "Short description", "Description"]
         self.log("Aplicando plantilla de mapeo 'Básico'...")
         self.clear_mapping()
         for essential in essential_fields:
@@ -148,51 +169,76 @@ class App(customtkinter.CTk):
                     break
                     
     def clear_mapping(self):
-        
+      
         self.log("Limpiando todo el mapeo...")
         for item in self.mapping_widgets: item['combo'].set("No importar")
+        
+    # --- NUEVA FUNCIÓN PARA DESCARGAR PLANTILLA ---
+    def download_template(self):
+        """Crea un CSV simplificado y pide al usuario dónde guardarlo."""
+        self.log("Creando plantilla simplificada...")
+        
+        # Define las columnas esenciales 
+        template_headers = {
+            'SKU': ['SKU-EJEMPLO-1', 'SKU-EJEMPLO-2'],
+            'Name': ['Nombre del Producto de Ejemplo 1', 'Nombre del Producto de Ejemplo 2'],
+            'Regular price': [99.99, 150.00],
+            'Short description': ['Descripción corta y atractiva aquí.', 'Otra descripción corta.'],
+            'Description': ['Descripción larga y detallada del producto aquí.', 'Más detalles sobre el producto 2.'],
+            'Images': ['nombre-de-imagen1.jpg', 'nombre-de-imagen2.jpg']
+        }
+        
+        df = pd.DataFrame(template_headers)
+        
+        # Pide al usuario que elija una ubicación y nombre para el archivo
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("Archivos CSV", "*.csv")],
+            title="Guardar plantilla como...",
+            initialfile="plantilla_productos_nuevos.csv"
+        )
+        
+        if filepath:
+            try:
+                # Guarda el DataFrame como un archivo CSV
+                df.to_csv(filepath, index=False, encoding='utf-8')
+                self.log(f"Plantilla guardada exitosamente en: {filepath}")
+            except Exception as e:
+                self.log(f"Error al guardar la plantilla: {e}")
 
     def log(self, message):
-        """Función centralizada para escribir en el cuadro de log."""
+       
         self.log_textbox.insert("end", message + "\n")
-        self.log_textbox.see("end") # Auto-scroll hacia el final
+        self.log_textbox.see("end")
         self.update_idletasks()
 
     def start_synchronization_thread(self):
-        """Inicia el proceso de sincronización en un hilo separado para no congelar la GUI."""
+      
         if self.is_syncing:
             self.log("Ya hay una sincronización en proceso.")
             return
-        
-        # Usamos un hilo para que la interfaz siga respondiendo
         sync_thread = threading.Thread(target=self.start_synchronization)
         sync_thread.start()
 
     def start_synchronization(self):
-        """El motor de procesamiento, ahora conectado a la interfaz."""
+       
         self.is_syncing = True
         self.start_sync_button.configure(state="disabled", text="Sincronizando...")
         self.log_textbox.delete("1.0", "end")
         self.log("================================")
         self.log("INICIANDO SINCRONIZACIÓN")
         self.log("================================")
-        
-        # 1. Validaciones
         if not self.csv_path or not self.image_folder_path:
             self.log("Error: Debes seleccionar un archivo CSV y una carpeta de imágenes.")
             self.is_syncing = False
             self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
             return
-
-        # 2. Recopilar mapeo
         user_mapping = {item['combo'].get().lower().replace(" ", "_"): item['csv_column'] for item in self.mapping_widgets if item['combo'].get() != "No importar"}
         if 'sku' not in user_mapping:
-            self.log("Error: El campo 'SKU' es obligatorio para la sincronización. Por favor, mapéalo.")
+            self.log("Error: El campo 'SKU' es obligatorio. Por favor, mapéalo.")
             self.is_syncing = False
             self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
             return
-
-        # 3. Leer el CSV completo
         try:
             df = pd.read_csv(self.csv_path, dtype=str).fillna('')
             self.log(f"Archivo CSV cargado. Se procesarán {len(df)} productos.")
@@ -202,24 +248,17 @@ class App(customtkinter.CTk):
             self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
             return
 
-        # 4. Bucle de procesamiento
         for index, row in df.iterrows():
             sku = row.get(user_mapping['sku'], '').strip()
             product_name = row.get(user_mapping.get('name', ''), sku)
-            
             if not sku:
                 self.log(f"Fila {index + 2}: Omitida (SKU vacío).")
                 continue
-
             self.log(f"--- Procesando: {product_name} (SKU: {sku}) ---")
-            
-            # Construir el payload dinámicamente
-            product_data = {'type': 'simple'} # O añadir lógica para tipo variable
+            product_data = {'type': 'simple'}
             for woo_field, csv_column in user_mapping.items():
-                if woo_field not in ['images', 'sku']: # El SKU ya lo tenemos
+                if woo_field not in ['images', 'sku']:
                     product_data[woo_field] = row.get(csv_column, '')
-
-            # Manejo de imágenes
             if 'images' in user_mapping:
                 image_cell = row.get(user_mapping['images'], '')
                 if image_cell and not image_cell.lower().startswith('http'):
@@ -229,14 +268,12 @@ class App(customtkinter.CTk):
                         product_data['images'] = [{'id': uploaded_image['id']}]
                 else:
                     self.log("  -> Imagen es URL o está vacía. Se ignora.")
-
-            # Lógica de creación/actualización
             existing_product = self.api_client.get_product_by_sku(sku)
             if existing_product:
                 result = self.api_client.update_product(existing_product['id'], product_data)
                 if result: self.log(f"  -> ÉXITO: Producto ID {existing_product['id']} actualizado.")
             else:
-                product_data['sku'] = sku # Asegurarnos de que el SKU va en la creación
+                product_data['sku'] = sku
                 result = self.api_client.create_product(product_data)
                 if result: self.log(f"  -> ÉXITO: Producto creado con ID {result['id']}.")
         
@@ -245,6 +282,7 @@ class App(customtkinter.CTk):
         self.log("================================")
         self.is_syncing = False
         self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
+
 
 if __name__ == "__main__":
     import os
