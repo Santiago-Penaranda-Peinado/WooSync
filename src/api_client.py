@@ -103,3 +103,51 @@ class WooCommerceAPI:
             if hasattr(e, 'response') and e.response is not None:
                 print(f"  -> Detalles del error: {e.response.text}")
             return None
+
+    def get_all_products(self):
+        """
+        Obtiene una lista completa de todos los productos de la tienda.
+        Maneja la paginación para obtener más de 100 productos.
+        """
+        all_products = []
+        page = 1
+        per_page = 100 # Máximo que permite la API por página
+        
+        while True:
+            try:
+                params = {'per_page': per_page, 'page': page}
+                response = requests.get(f"{self.base_url}/products", auth=self.auth, params=params)
+                response.raise_for_status()
+                products = response.json()
+                
+                if not products:
+                    break # Si no hay más productos, salimos del bucle
+                
+                all_products.extend(products)
+                page += 1
+            except requests.exceptions.RequestException as e:
+                print(f"Error al obtener la página {page} de productos: {e}")
+                return None # Devolvemos None si hay un error
+        
+        return all_products
+
+    def delete_product(self, product_id):
+        """
+        Elimina permanentemente un producto por su ID.
+        
+        Args:
+            product_id (int): El ID del producto a eliminar.
+            
+        Returns:
+            bool: True si se eliminó con éxito, False si no.
+        """
+        try:
+            # force=true es para eliminar permanentemente en vez de enviar a la papelera
+            response = requests.delete(f"{self.base_url}/products/{product_id}", auth=self.auth, params={'force': True})
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            print(f"Error al ELIMINAR el producto con ID {product_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Detalles del error: {e.response.text}")
+            return False

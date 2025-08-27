@@ -1,7 +1,7 @@
 # src/app_gui.py
 
 import customtkinter
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog # <-- Necesitamos simpledialog para la confirmación
 import pandas as pd
 import os
 import threading
@@ -13,25 +13,19 @@ customtkinter.set_default_color_theme("blue")
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
-
         self.title("WooSync - Sincronizador para WooCommerce")
-        self.geometry("700x700") # Un poco más de altura para el nuevo botón
-
-        # --- Variables de estado ---
+        self.geometry("700x750")
         self.api_client = None
         self.csv_path = ""
         self.image_folder_path = ""
         self.mapping_widgets = []
         self.is_syncing = False
-
-        # --- Marcos (pantallas) ---
         self.login_frame = customtkinter.CTkFrame(self)
         self.main_frame = customtkinter.CTkFrame(self)
-
         self.create_login_widgets()
         self.login_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-    # ... (create_login_widgets y connect_to_store no tienen cambios)
+    # ... (create_login_widgets y connect_to_store)
     def create_login_widgets(self):
         welcome_label = customtkinter.CTkLabel(self.login_frame, text="Conectar a la Tienda", font=("Arial", 20))
         welcome_label.pack(pady=20)
@@ -63,23 +57,19 @@ class App(customtkinter.CTk):
         else:
             self.api_client = None
             self.status_label.configure(text="Error: Revisa la URL y las credenciales.", text_color="red")
-
-
+    
     def create_main_widgets(self):
         """Crea los componentes de la pantalla principal."""
         
+        # ... (la parte de selección de archivos)
         file_frame = customtkinter.CTkFrame(self.main_frame)
         file_frame.pack(pady=10, padx=10, fill="x")
-        
-        # --- Marco para la plantilla ---
         template_frame = customtkinter.CTkFrame(file_frame)
         template_frame.pack(side="left", padx=20, pady=10, expand=True)
         template_label = customtkinter.CTkLabel(template_frame, text="¿Empezando desde cero?")
         template_label.pack()
         template_button = customtkinter.CTkButton(template_frame, text="Descargar Plantilla Simplificada", command=self.download_template)
         template_button.pack(pady=5)
-
-        # --- Marco para subir archivos existentes ---
         upload_frame = customtkinter.CTkFrame(file_frame)
         upload_frame.pack(side="left", padx=20, pady=10, expand=True)
         upload_label = customtkinter.CTkLabel(upload_frame, text="¿Ya tienes un archivo?")
@@ -91,7 +81,8 @@ class App(customtkinter.CTk):
         self.image_folder_label.pack(pady=10)
         image_button = customtkinter.CTkButton(self.main_frame, text="Seleccionar Carpeta de Imágenes", command=self.select_image_folder)
         image_button.pack(pady=5)
-
+        
+        # ... (la parte de presets de mapeo xd)
         presets_frame = customtkinter.CTkFrame(self.main_frame)
         presets_frame.pack(pady=5, padx=10, fill="x")
         presets_label = customtkinter.CTkLabel(presets_frame, text="Plantillas de Mapeo Rápido:")
@@ -104,21 +95,37 @@ class App(customtkinter.CTk):
         self.mapping_frame = customtkinter.CTkScrollableFrame(self.main_frame, label_text="Paso 3: Mapea las columnas")
         self.mapping_frame.pack(pady=10, padx=10, fill="both", expand=True)
         
+        # --- NUEVO: Selector de Modo de Sincronización ---
+        sync_mode_frame = customtkinter.CTkFrame(self.main_frame)
+        sync_mode_frame.pack(pady=10, padx=10, fill="x")
+        
+        mode_label = customtkinter.CTkLabel(sync_mode_frame, text="Modo de Sincronización:")
+        mode_label.pack(side="left", padx=10)
+        
+        self.sync_mode = customtkinter.StringVar(value="safe") # Variable para guardar el modo
+        
+        safe_radio = customtkinter.CTkRadioButton(sync_mode_frame, text="Modo Seguro (Crear y Actualizar)", variable=self.sync_mode, value="safe", command=self.on_sync_mode_change)
+        safe_radio.pack(side="left", padx=5)
+        
+        mirror_radio = customtkinter.CTkRadioButton(sync_mode_frame, text="Modo Espejo (Sincronización Completa)", variable=self.sync_mode, value="mirror", command=self.on_sync_mode_change)
+        mirror_radio.pack(side="left", padx=5)
+        
+        self.warning_label = customtkinter.CTkLabel(self.main_frame, text="", text_color="orange")
+        self.warning_label.pack(pady=5, padx=10)
+
+        # --- Marco de Sincronización  ---
         sync_frame = customtkinter.CTkFrame(self.main_frame)
         sync_frame.pack(pady=10, padx=10, fill="x")
         self.start_sync_button = customtkinter.CTkButton(sync_frame, text="Iniciar Sincronización", command=self.start_synchronization_thread)
         self.start_sync_button.pack(pady=10)
-        
         self.log_textbox = customtkinter.CTkTextbox(self.main_frame, height=150)
         self.log_textbox.pack(pady=10, padx=10, fill="both", expand=True)
 
-
+    # ... (select_csv_file, select_image_folder, create_mapping_widgets, presets y log)
     def select_csv_file(self):
-       
         filepath = filedialog.askopenfilename(filetypes=(("Archivos CSV", "*.csv"), ("Todos los archivos", "*.*")))
         if not filepath: return
         self.csv_path = filepath
-        # Mostramos solo el nombre del archivo, no la ruta completa
         filename = os.path.basename(filepath)
         upload_label = self.main_frame.winfo_children()[0].winfo_children()[1].winfo_children()[0]
         upload_label.configure(text=f"Archivo: {filename}")
@@ -129,14 +136,12 @@ class App(customtkinter.CTk):
             self.log(f"Error al leer el CSV: {e}")
 
     def select_image_folder(self):
-        
         folderpath = filedialog.askdirectory()
         if not folderpath: return
         self.image_folder_path = folderpath
         self.image_folder_label.configure(text=f"Carpeta: {folderpath}")
         
     def create_mapping_widgets(self, csv_columns):
-       
         for widget in self.mapping_frame.winfo_children(): widget.destroy()
         self.mapping_widgets = []
         woocommerce_fields = [ "No importar", "ID", "Name", "SKU", "Regular price", "Sale price", "Short description", "Description", "Stock", "Categories", "Images" ]
@@ -158,7 +163,6 @@ class App(customtkinter.CTk):
             self.mapping_widgets.append({'csv_column': column, 'combo': combo})
 
     def apply_basic_mapping(self):
-       
         essential_fields = ["Name", "SKU", "Regular price", "Images", "Short description", "Description"]
         self.log("Aplicando plantilla de mapeo 'Básico'...")
         self.clear_mapping()
@@ -169,51 +173,37 @@ class App(customtkinter.CTk):
                     break
                     
     def clear_mapping(self):
-      
         self.log("Limpiando todo el mapeo...")
         for item in self.mapping_widgets: item['combo'].set("No importar")
         
-    # --- NUEVA FUNCIÓN PARA DESCARGAR PLANTILLA ---
     def download_template(self):
-        """Crea un CSV simplificado y pide al usuario dónde guardarlo."""
         self.log("Creando plantilla simplificada...")
-        
-        # Define las columnas esenciales 
-        template_headers = {
-            'SKU': ['SKU-EJEMPLO-1', 'SKU-EJEMPLO-2'],
-            'Name': ['Nombre del Producto de Ejemplo 1', 'Nombre del Producto de Ejemplo 2'],
-            'Regular price': [99.99, 150.00],
-            'Short description': ['Descripción corta y atractiva aquí.', 'Otra descripción corta.'],
-            'Description': ['Descripción larga y detallada del producto aquí.', 'Más detalles sobre el producto 2.'],
-            'Images': ['nombre-de-imagen1.jpg', 'nombre-de-imagen2.jpg']
-        }
-        
+        template_headers = {'SKU': ['SKU-EJEMPLO-1', 'SKU-EJEMPLO-2'], 'Name': ['Nombre del Producto de Ejemplo 1', 'Nombre del Producto de Ejemplo 2'], 'Regular price': [99.99, 150.00], 'Short description': ['Descripción corta y atractiva aquí.', 'Otra descripción corta.'], 'Description': ['Descripción larga y detallada del producto aquí.', 'Más detalles sobre el producto 2.'], 'Images': ['nombre-de-imagen1.jpg', 'nombre-de-imagen2.jpg']}
         df = pd.DataFrame(template_headers)
-        
-        # Pide al usuario que elija una ubicación y nombre para el archivo
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("Archivos CSV", "*.csv")],
-            title="Guardar plantilla como...",
-            initialfile="plantilla_productos_nuevos.csv"
-        )
-        
+        filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Archivos CSV", "*.csv")], title="Guardar plantilla como...", initialfile="plantilla_productos_nuevos.csv")
         if filepath:
             try:
-                # Guarda el DataFrame como un archivo CSV
                 df.to_csv(filepath, index=False, encoding='utf-8')
                 self.log(f"Plantilla guardada exitosamente en: {filepath}")
             except Exception as e:
                 self.log(f"Error al guardar la plantilla: {e}")
 
+    # --- NUEVA FUNCIÓN DE ADVERTENCIA ---
+    def on_sync_mode_change(self):
+        if self.sync_mode.get() == "mirror":
+            self.warning_label.configure(text="¡ADVERTENCIA! El Modo Espejo eliminará permanentemente de la tienda\n"
+                                               "todos los productos que NO estén en tu archivo CSV.")
+            self.start_sync_button.configure(fg_color="red", hover_color="darkred")
+        else:
+            self.warning_label.configure(text="")
+            self.start_sync_button.configure(fg_color=("#3B8ED0", "#1F6AA5"), hover_color=("#36719F", "#144870"))
+
     def log(self, message):
-       
         self.log_textbox.insert("end", message + "\n")
         self.log_textbox.see("end")
         self.update_idletasks()
 
     def start_synchronization_thread(self):
-      
         if self.is_syncing:
             self.log("Ya hay una sincronización en proceso.")
             return
@@ -221,13 +211,15 @@ class App(customtkinter.CTk):
         sync_thread.start()
 
     def start_synchronization(self):
-       
+        """El motor de procesamiento, AHORA CON MODOS DE SINCRONIZACIÓN."""
         self.is_syncing = True
         self.start_sync_button.configure(state="disabled", text="Sincronizando...")
         self.log_textbox.delete("1.0", "end")
         self.log("================================")
-        self.log("INICIANDO SINCRONIZACIÓN")
+        self.log(f"INICIANDO SINCRONIZACIÓN EN MODO: {self.sync_mode.get().upper()}")
         self.log("================================")
+        
+        # ... (Validaciones y recopilación de mapeo)
         if not self.csv_path or not self.image_folder_path:
             self.log("Error: Debes seleccionar un archivo CSV y una carpeta de imágenes.")
             self.is_syncing = False
@@ -235,39 +227,82 @@ class App(customtkinter.CTk):
             return
         user_mapping = {item['combo'].get().lower().replace(" ", "_"): item['csv_column'] for item in self.mapping_widgets if item['combo'].get() != "No importar"}
         if 'sku' not in user_mapping:
-            self.log("Error: El campo 'SKU' es obligatorio. Por favor, mapéalo.")
+            self.log("Error: El campo 'SKU' es obligatorio para la sincronización. Por favor, mapéalo.")
             self.is_syncing = False
             self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
             return
+            
         try:
             df = pd.read_csv(self.csv_path, dtype=str).fillna('')
-            self.log(f"Archivo CSV cargado. Se procesarán {len(df)} productos.")
+            self.log(f"Archivo CSV cargado. Contiene {len(df)} productos.")
         except Exception as e:
             self.log(f"Error fatal al leer el CSV: {e}")
             self.is_syncing = False
             self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
             return
+            
+        # --- LÓGICA DEL MODO ESPEJO ---
+        if self.sync_mode.get() == "mirror":
+            self.log("Modo Espejo activado. Comparando productos...")
+            
+            # 1. Obtener SKUs del CSV
+            csv_skus = set(df[user_mapping['sku']].dropna().unique())
+            self.log(f"SKUs en el CSV: {len(csv_skus)}")
 
+            # 2. Obtener SKUs de la tienda
+            store_products = self.api_client.get_all_products()
+            if store_products is None:
+                self.log("Error: No se pudieron obtener los productos de la tienda para comparar.")
+                self.is_syncing = False
+                self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
+                return
+            
+            store_skus = {prod['sku']: prod['id'] for prod in store_products if prod['sku']}
+            self.log(f"SKUs en la tienda: {len(store_skus)}")
+
+            # 3. Encontrar productos a eliminar
+            skus_to_delete = set(store_skus.keys()) - csv_skus
+            if skus_to_delete:
+                # --- CONFIRMACIÓN FINAL Y PELIGROSA ---
+                confirmation_text = simpledialog.askstring(
+                    "CONFIRMACIÓN DE ELIMINACIÓN PERMANENTE",
+                    f"Estás a punto de ELIMINAR PERMANENTEMENTE {len(skus_to_delete)} productos de tu tienda.\n"
+                    "Esta acción no se puede deshacer.\n\n"
+                    "Para confirmar, escribe la palabra 'ELIMINAR' en mayúsculas:"
+                )
+                
+                if confirmation_text == "ELIMINAR":
+                    self.log(f"Confirmación recibida. Eliminando {len(skus_to_delete)} productos...")
+                    for sku in skus_to_delete:
+                        product_id = store_skus[sku]
+                        self.log(f"  -> Eliminando producto SKU: {sku} (ID: {product_id})")
+                        if not self.api_client.delete_product(product_id):
+                            self.log(f"  -> ERROR al eliminar SKU: {sku}")
+                else:
+                    self.log("Eliminación cancelada por el usuario. La sincronización continuará sin borrar productos.")
+            else:
+                self.log("No se encontraron productos para eliminar.")
+        
+        # --- Bucle de procesamiento (Crear y Actualizar) ---
+        # Este bucle se ejecuta en ambos modos
         for index, row in df.iterrows():
             sku = row.get(user_mapping['sku'], '').strip()
             product_name = row.get(user_mapping.get('name', ''), sku)
-            if not sku:
-                self.log(f"Fila {index + 2}: Omitida (SKU vacío).")
-                continue
+            if not sku: self.log(f"Fila {index + 2}: Omitida (SKU vacío)."); continue
+
             self.log(f"--- Procesando: {product_name} (SKU: {sku}) ---")
             product_data = {'type': 'simple'}
             for woo_field, csv_column in user_mapping.items():
-                if woo_field not in ['images', 'sku']:
-                    product_data[woo_field] = row.get(csv_column, '')
+                if woo_field not in ['images', 'sku']: product_data[woo_field] = row.get(csv_column, '')
+
             if 'images' in user_mapping:
                 image_cell = row.get(user_mapping['images'], '')
                 if image_cell and not image_cell.lower().startswith('http'):
                     image_path = os.path.join(self.image_folder_path, image_cell)
                     uploaded_image = self.api_client.upload_image(image_path, image_cell)
-                    if uploaded_image:
-                        product_data['images'] = [{'id': uploaded_image['id']}]
-                else:
-                    self.log("  -> Imagen es URL o está vacía. Se ignora.")
+                    if uploaded_image: product_data['images'] = [{'id': uploaded_image['id']}]
+                else: self.log("  -> Imagen es URL o está vacía. Se ignora.")
+            
             existing_product = self.api_client.get_product_by_sku(sku)
             if existing_product:
                 result = self.api_client.update_product(existing_product['id'], product_data)
@@ -276,13 +311,13 @@ class App(customtkinter.CTk):
                 product_data['sku'] = sku
                 result = self.api_client.create_product(product_data)
                 if result: self.log(f"  -> ÉXITO: Producto creado con ID {result['id']}.")
-        
+
         self.log("================================")
         self.log("SINCRONIZACIÓN COMPLETADA")
         self.log("================================")
         self.is_syncing = False
         self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
-
+        self.on_sync_mode_change() # Resetea el color del botón
 
 if __name__ == "__main__":
     import os
