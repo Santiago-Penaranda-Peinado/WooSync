@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import threading
 from api_client import WooCommerceAPI
+from queue import Queue
 
 customtkinter.set_appearance_mode("System")
 customtkinter.set_default_color_theme("blue")
@@ -13,7 +14,7 @@ customtkinter.set_default_color_theme("blue")
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
-        # ... (el resto de __init__ sin cambios)
+        # ... (el resto de __init__ no tiene cambios importantes, solo se añade la cola de logs)
         self.title("WooSync - Sincronizador para WooCommerce")
         self.geometry("700x750")
         self.api_client = None
@@ -21,6 +22,7 @@ class App(customtkinter.CTk):
         self.image_folder_path = ""
         self.mapping_widgets = []
         self.is_syncing = False
+        self.log_queue = Queue() # <-- Cola para los logs
         self.login_frame = customtkinter.CTkFrame(self)
         self.main_frame = customtkinter.CTkFrame(self)
         self.create_login_widgets()
@@ -58,9 +60,9 @@ class App(customtkinter.CTk):
         else:
             self.api_client = None
             self.status_label.configure(text="Error: Revisa la URL y las credenciales.", text_color="red")
-    
+
     def create_main_widgets(self):
-       
+        # ... (sin cambios)
         file_frame = customtkinter.CTkFrame(self.main_frame)
         file_frame.pack(pady=10, padx=10, fill="x")
         template_frame = customtkinter.CTkFrame(file_frame)
@@ -121,7 +123,7 @@ class App(customtkinter.CTk):
             df_headers = pd.read_csv(self.csv_path, nrows=0).columns.tolist()
             self.create_mapping_widgets(df_headers)
         except Exception as e:
-            self.log(f"Error al leer el CSV: {e}")
+            self.log("ERROR", f"Error al leer el CSV: {e}")
 
     def select_image_folder(self):
         folderpath = filedialog.askdirectory()
@@ -145,19 +147,36 @@ class App(customtkinter.CTk):
             self.mapping_widgets.append({'csv_column': column, 'combo': combo})
 
     def auto_guess_mapping(self, column_name, combobox_widget):
-        best_guess = "No importar"
-        column_lower = column_name.lower().replace("_", " ").replace("-", " ")
+        """
+        Intenta adivinar el mapeo para una columna con un sistema de prioridad mejorado.
+        """
+        # Si la columna no tiene nombre, la ignoramos por defecto.
+        if "Unnamed:" in column_name:
+            combobox_widget.set("No importar")
+            return
+
+        column_lower = column_name.lower().replace("_", " ").replace("-", " ").strip()
+        
+        # Prioridad 1: Buscar coincidencia exacta
         for field in self.woocommerce_fields:
             if field.lower() == column_lower:
+                combobox_widget.set(field)
+                return # Si encontramos una coincidencia exacta, terminamos
+
+        # Prioridad 2: Si no hay exacta, buscar coincidencia parcial, pero de forma más segura
+        # Esto es por si una columna se llama "Product Name" o "Nombre del Producto"
+        best_guess = "No importar"
+        for field in self.woocommerce_fields:
+            # Buscamos que el nombre del campo esté como una palabra completa en la columna
+            if f" {field.lower()} " in f" {column_lower} " and len(field) > 2:
                 best_guess = field
-                break
-            if field.lower() in column_lower and len(field) > 2:
-                best_guess = field
+                break # A la primera coincidencia de palabra completa, la tomamos
+        
         combobox_widget.set(best_guess)
         
     def apply_basic_mapping(self):
-        essential_fields = ["Name", "SKU", "Regular price", "Images", "Short description", "Description"]
-        self.log("Aplicando plantilla de mapeo 'Básico'...")
+        essential_fields = ["Name", "SKU", "Regular price", "Images", "Short description", "Description", "Categories"]
+        self.log("INFO", "Aplicando plantilla de mapeo 'Básico'...")
         self.clear_mapping()
         for essential in essential_fields:
             for item in self.mapping_widgets:
@@ -166,27 +185,28 @@ class App(customtkinter.CTk):
                     break
                     
     def clear_mapping(self):
-        self.log("Limpiando todo el mapeo...")
+        self.log("INFO", "Limpiando todo el mapeo...")
         for item in self.mapping_widgets: item['combo'].set("No importar")
         
     def apply_full_mapping(self):
-        self.log("Intentando mapear todas las columnas automáticamente...")
+        self.log("INFO", "Intentando mapear todas las columnas automáticamente...")
         for item in self.mapping_widgets:
             self.auto_guess_mapping(item['csv_column'], item['combo'])
 
     def download_template(self):
-        self.log("Creando plantilla simplificada...")
-        template_headers = {'SKU': ['SKU-EJEMPLO-1', 'SKU-EJEMPLO-2'], 'Name': ['Nombre del Producto de Ejemplo 1', 'Nombre del Producto de Ejemplo 2'], 'Regular price': [99.99, 150.00], 'Short description': ['Descripción corta y atractiva aquí.', 'Otra descripción corta.'], 'Description': ['Descripción larga y detallada del producto aquí.', 'Más detalles sobre el producto 2.'], 'Images': ['nombre-de-imagen1.jpg', 'nombre-de-imagen2.jpg']}
+        self.log("INFO", "Creando plantilla simplificada...")
+        template_headers = {'SKU': ['SKU-EJEMPLO-1'], 'Name': ['Producto de Ejemplo'], 'Regular price': [99.99], 'Short description': ['Desc corta.'], 'Description': ['Desc larga.'], 'Images': ['imagen.jpg'], 'Categories': ['Categoría 1, Categoría 2']}
         df = pd.DataFrame(template_headers)
-        filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Archivos CSV", "*.csv")], title="Guardar plantilla como...", initialfile="plantilla_productos_nuevos.csv")
+        filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Archivos CSV", "*.csv")], title="Guardar plantilla como...", initialfile="plantilla_productos.csv")
         if filepath:
             try:
                 df.to_csv(filepath, index=False, encoding='utf-8')
-                self.log(f"Plantilla guardada exitosamente en: {filepath}")
+                self.log("INFO", f"Plantilla guardada exitosamente en: {filepath}")
             except Exception as e:
-                self.log(f"Error al guardar la plantilla: {e}")
+                self.log("ERROR", f"Error al guardar la plantilla: {e}")
 
     def on_sync_mode_change(self):
+        # ... (sin cambios)
         if self.sync_mode.get() == "mirror":
             self.warning_label.configure(text="¡ADVERTENCIA! El Modo Espejo eliminará permanentemente de la tienda\n"
                                                "todos los productos que NO estén en tu archivo CSV.")
@@ -195,80 +215,74 @@ class App(customtkinter.CTk):
             self.warning_label.configure(text="")
             self.start_sync_button.configure(fg_color=("#3B8ED0", "#1F6AA5"), hover_color=("#36719F", "#144870"))
 
-    def log(self, message):
-        self.log_textbox.insert("end", message + "\n")
-        self.log_textbox.see("end")
-        self.update_idletasks()
+    # --- LOGGING SEGURO PARA HILOS ---
+    def log(self, level, message):
+        self.log_queue.put(f"[{level}] {message}")
+
+    def process_log_queue(self):
+        while not self.log_queue.empty():
+            message = self.log_queue.get()
+            self.log_textbox.insert("end", message + "\n")
+            self.log_textbox.see("end")
+        self.after(100, self.process_log_queue)
 
     def start_synchronization_thread(self):
         if self.is_syncing:
-            self.log("Ya hay una sincronización en proceso.")
+            self.log("INFO", "Ya hay una sincronización en proceso.")
             return
         sync_thread = threading.Thread(target=self.start_synchronization)
         sync_thread.start()
 
-    # --- FUNCIÓN CORREGIDA ---
     def start_synchronization(self):
         self.is_syncing = True
         self.start_sync_button.configure(state="disabled", text="Sincronizando...")
         self.log_textbox.delete("1.0", "end")
-        self.log("================================")
-        self.log(f"INICIANDO SINCRONIZACIÓN EN MODO: {self.sync_mode.get().upper()}")
-        self.log("================================")
+        self.log("INFO", f"INICIANDO SINCRONIZACIÓN EN MODO: {self.sync_mode.get().upper()}")
         
         if not self.csv_path or not self.image_folder_path:
-            self.log("Error: Debes seleccionar un archivo CSV y una carpeta de imágenes.")
+            self.log("ERROR", "Debes seleccionar un archivo CSV y una carpeta de imágenes.")
             self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
         
         user_mapping = {item['combo'].get().lower().replace(" ", "_"): item['csv_column'] for item in self.mapping_widgets if item['combo'].get() != "No importar"}
         if 'sku' not in user_mapping:
-            self.log("Error: El campo 'SKU' es obligatorio."); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
+            self.log("ERROR", "El campo 'SKU' es obligatorio."); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
 
         try:
             df = pd.read_csv(self.csv_path, dtype=str).fillna('')
-            self.log(f"Archivo CSV cargado. Contiene {len(df)} productos.")
+            self.log("INFO", f"Archivo CSV cargado. Contiene {len(df)} productos.")
         except Exception as e:
-            self.log(f"Error fatal al leer el CSV: {e}"); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
+            self.log("ERROR", f"Error fatal al leer el CSV: {e}"); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
 
         if self.sync_mode.get() == "mirror":
-            self.log("Modo Espejo activado. Obteniendo datos de la tienda...")
+            # ... (la lógica de modo espejo no cambia, pero usará el logging seguro)
+            self.log("INFO", "Modo Espejo activado. Obteniendo datos de la tienda...")
             csv_skus = set(df[user_mapping['sku']].dropna().unique())
             store_products = self.api_client.get_all_products()
             if store_products is None:
-                self.log("Error: No se pudieron obtener los productos de la tienda."); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
+                self.log("ERROR", "No se pudieron obtener los productos de la tienda."); self.is_syncing = False; self.start_sync_button.configure(state="normal", text="Iniciar Sincronización"); return
             
             store_skus = {prod['sku']: prod['id'] for prod in store_products if prod['sku']}
             skus_to_delete = set(store_skus.keys()) - csv_skus
 
             if skus_to_delete:
-                # CORRECCIÓN: Llamamos al diálogo de forma segura usando self.after
                 self.after(0, self.ask_for_deletion_confirmation, skus_to_delete, store_skus)
-                return # Detenemos la ejecución aquí; el resto se reanudará después de la confirmación
+                return
             else:
-                self.log("No se encontraron productos para eliminar.")
+                self.log("INFO", "No se encontraron productos para eliminar.")
         
-        # Si no estamos en modo espejo o no hay nada que borrar, continuamos directamente
         self.process_products(df, user_mapping)
 
     def ask_for_deletion_confirmation(self, skus_to_delete, store_skus):
-        """Muestra el diálogo de confirmación en el hilo principal."""
-        confirmation_text = simpledialog.askstring(
-            "CONFIRMACIÓN DE ELIMINACIÓN PERMANENTE",
-            f"Estás a punto de ELIMINAR PERMANENTEMENTE {len(skus_to_delete)} productos de tu tienda.\n"
-            "Esta acción no se puede deshacer.\n\n"
-            "Para confirmar, escribe la palabra 'ELIMINAR' en mayúsculas:"
-        )
-        
+        # ... (sin cambios)
+        confirmation_text = simpledialog.askstring("CONFIRMACIÓN DE ELIMINACIÓN PERMANENTE", f"Estás a punto de ELIMINAR PERMANENTEMENTE {len(skus_to_delete)} productos de tu tienda.\nEsta acción no se puede deshacer.\n\nPara confirmar, escribe la palabra 'ELIMINAR' en mayúsculas:")
         if confirmation_text == "ELIMINAR":
-            self.log(f"Confirmación recibida. Eliminando {len(skus_to_delete)} productos...")
+            self.log("INFO", f"Confirmación recibida. Eliminando {len(skus_to_delete)} productos...")
             for sku in skus_to_delete:
                 product_id = store_skus[sku]
-                self.log(f"  -> Eliminando producto SKU: {sku} (ID: {product_id})")
-                if not self.api_client.delete_product(product_id): self.log(f"  -> ERROR al eliminar SKU: {sku}")
+                self.log("INFO", f"  -> Eliminando producto SKU: {sku} (ID: {product_id})")
+                if not self.api_client.delete_product(product_id): self.log("ERROR", f"  -> ERROR al eliminar SKU: {sku}")
         else:
-            self.log("Eliminación cancelada por el usuario.")
-        
-        # Ahora, continuamos con el resto de la sincronización
+            self.log("INFO", "Eliminación cancelada por el usuario.")
         user_mapping = {item['combo'].get().lower().replace(" ", "_"): item['csv_column'] for item in self.mapping_widgets if item['combo'].get() != "No importar"}
         df = pd.read_csv(self.csv_path, dtype=str).fillna('')
         self.process_products(df, user_mapping)
@@ -277,43 +291,54 @@ class App(customtkinter.CTk):
         """Bucle principal que crea y actualiza productos."""
         for index, row in df.iterrows():
             sku = row.get(user_mapping['sku'], '').strip()
+            if not sku: self.log("WARN", f"Fila {index + 2}: Omitida (SKU vacío)."); continue
             product_name = row.get(user_mapping.get('name', ''), sku)
-            if not sku: self.log(f"Fila {index + 2}: Omitida (SKU vacío)."); continue
-
-            self.log(f"--- Procesando: {product_name} (SKU: {sku}) ---")
+            self.log("INFO", f"--- Procesando: {product_name} (SKU: {sku}) ---")
             
-            # CORRECCIÓN: Excluimos 'id' del payload
             product_data = {'type': 'simple'}
             for woo_field, csv_column in user_mapping.items():
-                if woo_field not in ['images', 'sku', 'id']: # Excluimos 'id' aquí
-                    product_data[woo_field] = row.get(csv_column, '')
+                if woo_field not in ['images', 'sku', 'id']:
+                    # --- CORRECCIÓN DE CATEGORÍAS ---
+                    if woo_field == 'categories':
+                        cat_string = row.get(csv_column, '')
+                        if cat_string:
+                            # Separamos por comas y creamos la lista de objetos
+                            cat_list = [c.strip() for c in cat_string.split(',')]
+                            product_data['categories'] = [{'name': name} for name in cat_list]
+                    else:
+                        product_data[woo_field] = row.get(csv_column, '')
 
             if 'images' in user_mapping:
+                # ... (lógica de imágenes sin cambios)
                 image_cell = row.get(user_mapping['images'], '')
                 if image_cell and not image_cell.lower().startswith('http'):
                     image_path = os.path.join(self.image_folder_path, image_cell)
                     uploaded_image = self.api_client.upload_image(image_path, image_cell)
                     if uploaded_image: product_data['images'] = [{'id': uploaded_image['id']}]
-                else: self.log("  -> Imagen es URL o está vacía. Se ignora.")
+                else:
+                    self.log("INFO", "  -> Imagen es URL o está vacía. Se ignora.")
             
             existing_product = self.api_client.get_product_by_sku(sku)
             if existing_product:
                 result = self.api_client.update_product(existing_product['id'], product_data)
-                if result: self.log(f"  -> ÉXITO: Producto ID {existing_product['id']} actualizado.")
+                if result: self.log("SUCCESS", f"  -> Producto ID {existing_product['id']} actualizado.")
             else:
                 product_data['sku'] = sku
                 result = self.api_client.create_product(product_data)
-                if result: self.log(f"  -> ÉXITO: Producto creado con ID {result['id']}.")
+                if result: self.log("SUCCESS", f"  -> Producto creado con ID {result['id']}.")
 
-        self.log("================================")
-        self.log("SINCRONIZACIÓN COMPLETADA")
-        self.log("================================")
+        self.log("INFO", "================================")
+        self.log("INFO", "SINCRONIZACIÓN COMPLETADA")
+        self.log("INFO", "================================")
         self.is_syncing = False
         self.start_sync_button.configure(state="normal", text="Iniciar Sincronización")
         self.on_sync_mode_change()
 
-
 if __name__ == "__main__":
     import os
+    from queue import Queue
+    
     app = App()
+    # Iniciamos el bucle que procesa los logs
+    app.after(100, app.process_log_queue)
     app.mainloop()
