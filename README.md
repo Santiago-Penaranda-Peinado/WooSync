@@ -19,11 +19,6 @@ Este proyecto fue desarrollado para solucionar las ineficiencias de los métodos
 - **Generador de Plantillas:** Permite descargar un archivo CSV simplificado con las columnas esenciales para facilitar la creación de nuevos productos desde cero.
 - **Feedback en Tiempo Real:** Un cuadro de log en la interfaz muestra el progreso de la sincronización, los éxitos y los errores en tiempo real.
 
-## Captura de Pantalla
-
-*(Aquí puedes añadir la captura de pantalla que me enviaste: `image_3d7b53.png`)*
-![Interfaz de WooSync](https://i.imgur.com/your-image-url.png)
-
 ## Requisitos
 
 - Python 3.8 o superior
