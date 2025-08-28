@@ -1,4 +1,4 @@
-# VERSIÓN FINAL CON TIMEOUTS - REEMPLAZA TU ARCHIVO CON ESTO
+# VERSIÓN DEFINITIVA Y COMPLETA - REEMPLAZA TU ARCHIVO CON ESTO
 # src/api_client.py
 
 import requests
@@ -50,33 +50,26 @@ class WooCommerceAPI:
         all_products = []
         page = 1
         per_page = 100
-        
         while True:
             try:
                 params = {'per_page': per_page, 'page': page, 'status': 'any'}
-                # Aumentamos el timeout para esta llamada, ya que puede ser muy pesada
                 response = requests.get(f"{self.base_url}/products", auth=self.auth, params=params, timeout=120) 
                 response.raise_for_status()
                 products = response.json()
-                
                 if not products: break
                 all_products.extend(products)
                 if len(products) < per_page: break
                 page += 1
             except (RequestException, Timeout) as e:
-                error_result = self._handle_error(e, f"Error al obtener la pág {page} de productos")
-                return error_result
+                # Modificado para devolver el diccionario de error en lugar de None
+                return self._handle_error(e, f"Error al obtener la pág {page} de productos")
         return all_products
 
     def process_batch(self, batch_data):
         """Procesa un lote de productos para crear, actualizar o eliminar."""
-        if not any(batch_data.values()):
-            return None
+        if not any(batch_data.values()): return None
         try:
-            # Aumentamos el timeout para los lotes, ya que pueden procesar hasta 100 productos
-            response = requests.post(
-                f"{self.base_url}/products/batch", auth=self.auth, headers=self.headers, json=batch_data, timeout=180
-            )
+            response = requests.post(f"{self.base_url}/products/batch", auth=self.auth, headers=self.headers, json=batch_data, timeout=180)
             response.raise_for_status()
             return response.json()
         except (RequestException, Timeout) as e:
@@ -87,15 +80,31 @@ class WooCommerceAPI:
         try:
             with open(image_path, 'rb') as f:
                 headers = {'Content-Disposition': f'attachment; filename={image_name}'}
-                response = requests.post(
-                    f"{self.wp_base_url}/media", auth=self.auth, headers=headers, files={'file': (image_name, f)}, timeout=self.default_timeout
-                )
+                response = requests.post(f"{self.wp_base_url}/media", auth=self.auth, headers=headers, files={'file': (image_name, f)}, timeout=self.default_timeout)
             response.raise_for_status()
             return response.json()
         except FileNotFoundError:
             return self._handle_error(FileNotFoundError(f"No se encontró el archivo: {image_path}"), f"Error al subir '{image_name}'")
         except (RequestException, Timeout) as e:
             return self._handle_error(e, f"Error al subir la imagen '{image_name}'")
+
+    def create_product(self, product_data):
+        """Crea un nuevo producto en WooCommerce."""
+        try:
+            response = requests.post(f"{self.base_url}/products", auth=self.auth, headers=self.headers, json=product_data, timeout=self.default_timeout)
+            response.raise_for_status()
+            return response.json()
+        except (RequestException, Timeout) as e:
+            return self._handle_error(e, "Error al CREAR el producto")
+
+    def update_product(self, product_id, product_data):
+        """Actualiza un producto existente en WooCommerce."""
+        try:
+            response = requests.put(f"{self.base_url}/products/{product_id}", auth=self.auth, headers=self.headers, json=product_data, timeout=self.default_timeout)
+            response.raise_for_status()
+            return response.json()
+        except (RequestException, Timeout) as e:
+            return self._handle_error(e, f"Error al ACTUALIZAR el producto ID {product_id}")
 
     def delete_product(self, product_id):
         """Elimina permanentemente un producto por su ID."""
@@ -104,7 +113,5 @@ class WooCommerceAPI:
             response.raise_for_status()
             return True
         except (RequestException, Timeout) as e:
-            # El único cambio es aquí:
-            # Llamamos a nuestro manejador de errores centralizado
             self._handle_error(e, f"Error al ELIMINAR el producto ID {product_id}")
             return False
