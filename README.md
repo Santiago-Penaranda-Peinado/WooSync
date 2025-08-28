@@ -83,3 +83,10 @@ Este proyecto fue desarrollado para solucionar las ineficiencias de los métodos
 - [ ] **Versión 2.1:** Añadir soporte para Productos Variables.
 - [ ] **Versión 2.2:** Hacer que la aplicación "aprenda" de la tienda, obteniendo categorías y atributos existentes para un mapeo y validación de datos más inteligentes.
 - [ ] **Versión 3.0:** Empaquetar la aplicación en un archivo `.exe` con PyInstaller para su distribución en equipos sin Python.
+
+## Contacto y Soporte
+
+Si deseas contactarme o aportar voluntariamente al proyecto, puedes hacerlo a través de:
+
+* **Instagram:** [@santiago.penaranda.75](https://www.instagram.com/santiago.penaranda.75?igsh=aGxzYTRlNnZoaHZh)
+* **PayPal:** [Apoya el proyecto aquí](https://paypal.me/santielpilo)
