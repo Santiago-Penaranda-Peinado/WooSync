@@ -1,4 +1,4 @@
-# VERSIÓN DEFINITIVA Y COMPLETA - REEMPLAZA TU ARCHIVO CON ESTO
+# VERSIÓN FINAL CON TIMEOUTS -
 # src/api_client.py
 
 import requests
