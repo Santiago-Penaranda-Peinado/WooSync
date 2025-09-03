@@ -84,7 +84,7 @@ This project was developed to address the inefficiencies of manual import method
 -   [ ] **Attribute Support**: Add mapping for product attributes (e.g., Color, Size), which is essential for selling varied products.
 -   [ ] **Full Support for Variable Products**: Implement the logic to create and synchronize variable products with their respective variations (each with its own SKU, price, and attributes).
 -   [ ] **"Dry Run" Mode**: Add a simulation mode that reports what changes would be made without actually modifying the store's data.
--   [ ]~~ **Application Packaging**~~: ~~Create an `.exe` executable with PyInstaller for easy distribution on computers without Python installed.~~ (Available now in the repo)
+-   [x] ~~ **Application Packaging**~~: ~~Create an `.exe` executable with PyInstaller for easy distribution on computers without Python installed.~~ (Available now in the repo)
 -   [x] ~~**Improved Batch Feedback**~~: ~~Parse the response from the batch API to report exactly which products failed and why.~~ (This is now implemented in v3.0!)
 
 ## Contact and Support
@@ -183,7 +183,7 @@ Este proyecto fue desarrollado para solucionar las ineficiencias de los métodos
 -   [ ] **Soporte para Atributos**: Añadir mapeo para atributos de producto (ej. Color, Talla), fundamental para la venta de productos variados.
 -   [ ] **Soporte Completo para Productos Variables**: Implementar la lógica para crear y sincronizar productos variables con sus respectivas variaciones (SKU, precio y atributos propios).
 -   [ ] **Modo "Dry Run"**: Añadir un modo de simulación que reporte qué cambios se harían sin modificar realmente los datos de la tienda.
--   [ ]~~ **Empaquetado de la Aplicación**~~ :~~ Crear un ejecutable `.exe` con PyInstaller para una fácil distribución en equipos sin Python instalado.~~ (¡Un exe ya se encuentra disponible para la descarga en el repo!) 
+-   [x] ~~ **Empaquetado de la Aplicación**~~ :~~ Crear un ejecutable `.exe` con PyInstaller para una fácil distribución en equipos sin Python instalado.~~ (¡Un exe ya se encuentra disponible para la descarga en el repo!) 
 -   [x] ~~**Feedback de Lotes Mejorado**~~: ~~Analizar la respuesta de la API de lotes para informar exactamente qué productos fallaron y por qué.~~ (¡Esto ya está implementado en la v3.0!)
 
 ## Contacto y Soporte
