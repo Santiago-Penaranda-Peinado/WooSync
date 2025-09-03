@@ -62,3 +62,4 @@ venv.bak/
 
 # Ignorar archivos de datos de prueba
 data/*.csv
+config.json
