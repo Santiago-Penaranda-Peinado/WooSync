@@ -1,9 +1,12 @@
-# VERSIÓN FINAL CON TIMEOUTS -
 # src/api_client.py
 
 import requests
 from requests.auth import HTTPBasicAuth
 from requests.exceptions import RequestException, Timeout
+import logging
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class WooCommerceAPI:
     """
@@ -14,8 +17,7 @@ class WooCommerceAPI:
         self.wp_base_url = f"{base_url}/wp-json/wp/v2"
         self.auth = HTTPBasicAuth(username, app_password)
         self.headers = {'Content-Type': 'application/json'}
-        # Timeout por defecto en segundos para la mayoría de las peticiones
-        self.default_timeout = 60 
+        self.default_timeout = 60
 
     def _handle_error(self, e, context_message):
         """Función centralizada para manejar y formatear errores de requests."""
@@ -31,15 +33,20 @@ class WooCommerceAPI:
                 except ValueError:
                     error_details += f" | Respuesta del servidor: {e.response.text}"
         
-        print(error_details) # Para debugging en consola
+        logging.error(error_details)
         return {'error': error_details}
 
     def check_connection(self):
         """Verifica si la conexión y las credenciales con la API son correctas."""
         try:
-            response = requests.get(f"{self.base_url}/products", auth=self.auth, params={'per_page': 1}, timeout=self.default_timeout)
+            response = requests.get(
+                f"{self.base_url}/products",
+                auth=self.auth,
+                params={'per_page': 1},
+                timeout=self.default_timeout
+            )
             response.raise_for_status()
-            print("¡Conexión con la API de WooCommerce exitosa!")
+            logging.info("¡Conexión con la API de WooCommerce exitosa!")
             return True
         except (RequestException, Timeout) as e:
             self._handle_error(e, "Error de conexión con la API")
@@ -53,7 +60,12 @@ class WooCommerceAPI:
         while True:
             try:
                 params = {'per_page': per_page, 'page': page, 'status': 'any'}
-                response = requests.get(f"{self.base_url}/products", auth=self.auth, params=params, timeout=120) 
+                response = requests.get(
+                    f"{self.base_url}/products",
+                    auth=self.auth,
+                    params=params,
+                    timeout=120
+                ) 
                 response.raise_for_status()
                 products = response.json()
                 if not products: break
@@ -61,7 +73,6 @@ class WooCommerceAPI:
                 if len(products) < per_page: break
                 page += 1
             except (RequestException, Timeout) as e:
-                # Modificado para devolver el diccionario de error en lugar de None
                 return self._handle_error(e, f"Error al obtener la pág {page} de productos")
         return all_products
 
@@ -69,7 +80,13 @@ class WooCommerceAPI:
         """Procesa un lote de productos para crear, actualizar o eliminar."""
         if not any(batch_data.values()): return None
         try:
-            response = requests.post(f"{self.base_url}/products/batch", auth=self.auth, headers=self.headers, json=batch_data, timeout=180)
+            response = requests.post(
+                f"{self.base_url}/products/batch",
+                auth=self.auth,
+                headers=self.headers,
+                json=batch_data,
+                timeout=180
+            )
             response.raise_for_status()
             return response.json()
         except (RequestException, Timeout) as e:
@@ -80,7 +97,13 @@ class WooCommerceAPI:
         try:
             with open(image_path, 'rb') as f:
                 headers = {'Content-Disposition': f'attachment; filename={image_name}'}
-                response = requests.post(f"{self.wp_base_url}/media", auth=self.auth, headers=headers, files={'file': (image_name, f)}, timeout=self.default_timeout)
+                response = requests.post(
+                    f"{self.wp_base_url}/media",
+                    auth=self.auth,
+                    headers=headers,
+                    files={'file': (image_name, f)},
+                    timeout=self.default_timeout
+                )
             response.raise_for_status()
             return response.json()
         except FileNotFoundError:
@@ -91,7 +114,13 @@ class WooCommerceAPI:
     def create_product(self, product_data):
         """Crea un nuevo producto en WooCommerce."""
         try:
-            response = requests.post(f"{self.base_url}/products", auth=self.auth, headers=self.headers, json=product_data, timeout=self.default_timeout)
+            response = requests.post(
+                f"{self.base_url}/products",
+                auth=self.auth,
+                headers=self.headers,
+                json=product_data,
+                timeout=self.default_timeout
+            )
             response.raise_for_status()
             return response.json()
         except (RequestException, Timeout) as e:
@@ -100,7 +129,13 @@ class WooCommerceAPI:
     def update_product(self, product_id, product_data):
         """Actualiza un producto existente en WooCommerce."""
         try:
-            response = requests.put(f"{self.base_url}/products/{product_id}", auth=self.auth, headers=self.headers, json=product_data, timeout=self.default_timeout)
+            response = requests.put(
+                f"{self.base_url}/products/{product_id}",
+                auth=self.auth,
+                headers=self.headers,
+                json=product_data,
+                timeout=self.default_timeout
+            )
             response.raise_for_status()
             return response.json()
         except (RequestException, Timeout) as e:
@@ -109,7 +144,12 @@ class WooCommerceAPI:
     def delete_product(self, product_id):
         """Elimina permanentemente un producto por su ID."""
         try:
-            response = requests.delete(f"{self.base_url}/products/{product_id}", auth=self.auth, params={'force': True}, timeout=self.default_timeout)
+            response = requests.delete(
+                f"{self.base_url}/products/{product_id}",
+                auth=self.auth,
+                params={'force': True},
+                timeout=self.default_timeout
+            )
             response.raise_for_status()
             return True
         except (RequestException, Timeout) as e:

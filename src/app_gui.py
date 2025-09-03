@@ -1,8 +1,11 @@
+# src/app_gui.py
+
 import customtkinter
 from tkinter import filedialog, simpledialog
 import pandas as pd
 import os
 import threading
+import json
 from api_client import WooCommerceAPI
 from queue import Queue
 
@@ -18,10 +21,9 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
         
-        # DICCIONARIO DE TRADUCCIONES
         self.translations = {
             "es": {
-                "window_title": "WooSync v2.2 - Sincronizador para WooCommerce",
+                "window_title": "WooSync v3.0 - Sincronizador para WooCommerce",
                 "connect_to_store": "Conectar a la Tienda",
                 "store_url_placeholder": "URL de la tienda (https://...)",
                 "username_placeholder": "Nombre de Usuario de WordPress",
@@ -69,6 +71,7 @@ class App(customtkinter.CTk):
                 "log_store_products_found": "Se encontraron {count} productos con SKU en la tienda.",
                 "delete_confirmation_dialog_title": "CONFIRMACIÓN DE ELIMINACIÓN PERMANENTE",
                 "delete_confirmation_dialog_text": "Estás a punto de ELIMINAR PERMANENTEMENTE {count} productos.\nEsta acción no se puede deshacer.\n\nPara confirmar, escribe 'ELIMINAR' en mayúsculas:",
+                "delete_confirmation_keyword": "ELIMINAR",
                 "log_mirror_sync_continue": "Confirmación recibida. Eliminando {count} productos por lotes...",
                 "log_mirror_sync_delete_batch": "Enviando lote de ELIMINACIÓN de {count} productos...",
                 "log_mirror_sync_cancelled": "Eliminación cancelada por el usuario.",
@@ -78,20 +81,27 @@ class App(customtkinter.CTk):
                 "log_sync_aborted_error": "SINCRONIZACIÓN ABORTADA POR ERRORES",
                 "log_processing_sku": "({current}/{total}) Procesando SKU: {sku}",
                 "log_warn_empty_sku": "Fila {row}: Omitida (SKU vacío).",
-                "log_success_product_updated": "Producto actualizado: {sku}",
+                "log_success_product_updated": "Producto Actualizado: {sku} (ID: {id})",
                 "log_error_product_update": "Error al actualizar {sku}: {error}",
-                "log_success_product_created": "Producto creado: {sku}",
+                "log_success_product_created": "Producto Creado: {sku} (ID: {id})",
                 "log_error_product_create": "Error al crear {sku}: {error}",
                 "log_batch_create_ready": "Preparado para crear: {count} productos.",
                 "log_batch_update_ready": "Preparado para actualizar: {count} productos.",
                 "log_batch_create_sending": "Enviando lote de CREACIÓN de {count} productos...",
                 "log_batch_update_sending": "Enviando lote de ACTUALIZACIÓN de {count} productos...",
-                "delete_confirmation_keyword": "ELIMINAR",
                 "log_process_summary": "Proceso completado. Creados: {created}, Actualizados: {updated}.",
-                "language_toggle_button": "EN/ES"
+                "language_toggle_button": "EN/ES",
+                "save_mapping_button": "Guardar Mapeo",
+                "load_mapping_button": "Cargar Mapeo",
+                "warn_no_mapping_to_save": "No hay un mapeo activo para guardar.",
+                "warn_load_csv_first": "Por favor, carga un archivo CSV antes de cargar un mapeo.",
+                "log_mapping_saved": "Mapeo guardado exitosamente en: {filepath}",
+                "log_mapping_loaded": "Mapeo cargado exitosamente desde: {filepath}",
+                "error_loading_mapping": "Error al cargar el archivo de mapeo. Asegúrate de que es un JSON válido.",
+                "warn_duplicate_skus_found": "¡ATENCIÓN! Se encontraron los siguientes SKUs duplicados en el CSV. Se procesará la última aparición de cada uno:"
             },
             "en": {
-                "window_title": "WooSync v2.2 - WooCommerce Synchronizer",
+                "window_title": "WooSync v3.0 - WooCommerce Synchronizer",
                 "connect_to_store": "Connect to Store",
                 "store_url_placeholder": "Store URL (https://...)",
                 "username_placeholder": "WordPress Username",
@@ -158,70 +168,54 @@ class App(customtkinter.CTk):
                 "log_batch_update_sending": "Sending UPDATE batch of {count} products...",
                 "delete_confirmation_keyword": "DELETE",
                 "log_process_summary": "Process completed. Created: {created}, Updated: {updated}.",
-                "language_toggle_button": "EN/ES"
+                "language_toggle_button": "EN/ES",
+                "save_mapping_button": "Save Mapping",
+                "load_mapping_button": "Load Mapping",
+                "warn_no_mapping_to_save": "There is no active mapping to save.",
+                "warn_load_csv_first": "Please load a CSV file before loading a mapping.",
+                "log_mapping_saved": "Mapping saved successfully to: {filepath}",
+                "log_mapping_loaded": "Mapping loaded successfully from: {filepath}",
+                "error_loading_mapping": "Error loading mapping file. Ensure it is a valid JSON.",
+                "warn_duplicate_skus_found": "WARNING! The following duplicate SKUs were found in the CSV. The last occurrence of each will be processed:"
             }
         }
         
-        # INICIALIZACIÓN DE IDIOMA
         self.language = "es"
         self.title(self._("window_title"))
-        
-        self.geometry("800x800")
+        self.geometry("800x850")
         self.api_client = None
         self.csv_path = ""
         self.image_folder_path = ""
         self.mapping_widgets = []
         self.is_syncing = False
         self.log_queue = Queue()
-        self.API_FIELD_MAP = {
-            "ID": "id", 
-            "Name": "name", 
-            "SKU": "sku", 
-            "Regular price": "regular_price", 
-            "Sale price": "sale_price", 
-            "Description": "description", 
-            "Short description": "short_description", 
-            "Stock": "stock_quantity", 
-            "Weight": "weight", 
-            "Length": "length", 
-            "Width": "width", 
-            "Height": "height", 
-            "Categories": "categories", 
-            "Tags": "tags", 
-            "Images": "images", 
-            "Purchase note": "purchase_note", 
-            "Menu order": "menu_order"
-        }
+        self.API_FIELD_MAP = {"ID": "id", "Name": "name", "SKU": "sku", "Regular price": "regular_price", "Sale price": "sale_price", "Description": "description", "Short description": "short_description", "Stock": "stock_quantity", "Weight": "weight", "Length": "length", "Width": "width", "Height": "height", "Categories": "categories", "Tags": "tags", "Images": "images", "Purchase note": "purchase_note", "Menu order": "menu_order"}
         
         self.login_frame = customtkinter.CTkFrame(self)
         self.main_frame = customtkinter.CTkFrame(self)
         
         self.create_login_widgets()
         self.login_frame.pack(padx=20, pady=20, fill="both", expand=True)
+        self.load_config()
 
     def _(self, key):
-        """Función helper para obtener la traducción de una clave."""
         return self.translations[self.language].get(key, key)
 
     def toggle_language(self):
-        """Cambia el idioma y actualiza toda la UI."""
         self.language = "en" if self.language == "es" else "es"
         self.update_ui_text()
 
     def update_ui_text(self):
-        """Actualiza todos los textos visibles en la aplicación."""
         self.title(self._("window_title"))
-        # Actualizar textos de la pantalla de login
+        
         if hasattr(self, 'welcome_label') and self.login_frame.winfo_ismapped():
             self.welcome_label.configure(text=self._("connect_to_store"))
             self.url_entry.configure(placeholder_text=self._("store_url_placeholder"))
             self.user_entry.configure(placeholder_text=self._("username_placeholder"))
             self.password_entry.configure(placeholder_text=self._("app_password_placeholder"))
             self.connect_button.configure(text=self._("connect_button"))
-            if hasattr(self, 'lang_toggle_button'):
-                self.lang_toggle_button.configure(text=self._("language_toggle_button"))
+            self.lang_toggle_button.configure(text=self._("language_toggle_button"))
 
-        # Actualizar textos de la pantalla principal
         if hasattr(self, 'template_label') and self.main_frame.winfo_ismapped():
             self.template_label.configure(text=self._("starting_from_scratch"))
             self.template_button.configure(text=self._("download_template_button"))
@@ -231,23 +225,62 @@ class App(customtkinter.CTk):
             self.basic_button.configure(text=self._("basic_preset_button"))
             self.full_button.configure(text=self._("map_all_preset_button"))
             self.clear_button.configure(text=self._("clear_all_preset_button"))
+            self.save_mapping_button.configure(text=self._("save_mapping_button"))
+            self.load_mapping_button.configure(text=self._("load_mapping_button"))
             self.mode_label.configure(text=self._("sync_mode_label"))
             self.safe_radio.configure(text=self._("safe_mode_radio"))
             self.mirror_radio.configure(text=self._("mirror_mode_radio"))
             self.compatibility_mode_check.configure(text=self._("compatibility_mode_check"))
-            
-            # Asegurarse de que el botón de sincronización refleje el estado correcto
             if not self.is_syncing:
                 self.start_sync_button.configure(text=self._("start_sync_button"))
-            else:
-                self.start_sync_button.configure(text=self._("syncing_button"))
-
-            if hasattr(self, 'lang_toggle_button_main'):
-                self.lang_toggle_button_main.configure(text=self._("language_toggle_button"))
+            self.lang_toggle_button_main.configure(text=self._("language_toggle_button"))
             self.on_sync_mode_change()
 
+    def load_config(self):
+        try:
+            with open("config.json", "r") as f:
+                config = json.load(f)
+                self.url_entry.insert(0, config.get("store_url", ""))
+                self.user_entry.insert(0, config.get("username", ""))
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
+    def save_config(self, store_url, username):
+        try:
+            with open("config.json", "w") as f:
+                json.dump({"store_url": store_url, "username": username}, f)
+        except Exception as e:
+            self.log("ERROR", f"Error saving config: {e}")
+
+    def save_mapping(self):
+        if not self.mapping_widgets:
+            self.log("WARN", self._("warn_no_mapping_to_save"))
+            return
+        filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")], title=self._("save_mapping_button"))
+        if not filepath: return
+        mapping_to_save = {item['csv_column']: item['combo'].get() for item in self.mapping_widgets}
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(mapping_to_save, f, indent=4, ensure_ascii=False)
+        self.log("SUCCESS", self._("log_mapping_saved").format(filepath=filepath))
+
+    def load_mapping(self):
+        if not self.mapping_widgets:
+            self.log("WARN", self._("warn_load_csv_first"))
+            return
+        filepath = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")], title=self._("load_mapping_button"))
+        if not filepath: return
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                loaded_mapping = json.load(f)
+            for item in self.mapping_widgets:
+                csv_col = item['csv_column']
+                if csv_col in loaded_mapping and loaded_mapping[csv_col] in item['combo'].cget("values"):
+                    item['combo'].set(loaded_mapping[csv_col])
+            self.log("SUCCESS", self._("log_mapping_loaded").format(filepath=filepath))
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.log("ERROR", self._("error_loading_mapping"))
+    
     def create_login_widgets(self):
-        # Botón de idioma
         lang_frame = customtkinter.CTkFrame(self.login_frame)
         lang_frame.pack(anchor="ne", padx=10, pady=10)
         self.lang_toggle_button = customtkinter.CTkButton(lang_frame, text=self._("language_toggle_button"), command=self.toggle_language, width=50)
@@ -277,6 +310,7 @@ class App(customtkinter.CTk):
         self.update_idletasks()
         self.api_client = WooCommerceAPI(store_url, username, password)
         if self.api_client.check_connection():
+            self.save_config(store_url, username)
             self.login_frame.pack_forget()
             self.create_main_widgets()
             self.main_frame.pack(padx=20, pady=20, fill="both", expand=True)
@@ -285,7 +319,6 @@ class App(customtkinter.CTk):
             self.status_label.configure(text=self._("error_connection_failed"), text_color="red")
     
     def create_main_widgets(self):
-        # Botón de idioma en la pantalla principal
         lang_frame = customtkinter.CTkFrame(self.main_frame)
         lang_frame.pack(anchor="ne", padx=10, pady=0, fill="x")
         self.lang_toggle_button_main = customtkinter.CTkButton(lang_frame, text=self._("language_toggle_button"), command=self.toggle_language, width=50)
@@ -322,7 +355,11 @@ class App(customtkinter.CTk):
         self.full_button.pack(side="left", padx=5)
         self.clear_button = customtkinter.CTkButton(presets_frame, text=self._("clear_all_preset_button"), command=self.clear_mapping)
         self.clear_button.pack(side="left", padx=5)
-        
+        self.save_mapping_button = customtkinter.CTkButton(presets_frame, text=self._("save_mapping_button"), command=self.save_mapping)
+        self.save_mapping_button.pack(side="left", padx=(20, 5))
+        self.load_mapping_button = customtkinter.CTkButton(presets_frame, text=self._("load_mapping_button"), command=self.load_mapping)
+        self.load_mapping_button.pack(side="left", padx=5)
+
         self.mapping_frame = customtkinter.CTkScrollableFrame(self.main_frame, label_text=self._("step3_mapping_label"))
         self.mapping_frame.pack(pady=10, padx=10, fill="both", expand=True)
         
@@ -335,10 +372,8 @@ class App(customtkinter.CTk):
         self.safe_radio.pack(side="left", padx=5)
         self.mirror_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("mirror_mode_radio"), variable=self.sync_mode, value="mirror", command=self.on_sync_mode_change)
         self.mirror_radio.pack(side="left", padx=5)
-        
         self.compatibility_mode_var = customtkinter.StringVar(value="off")
-        self.compatibility_mode_check = customtkinter.CTkCheckBox(sync_mode_frame, text=self._("compatibility_mode_check"),
-                                                                  variable=self.compatibility_mode_var, onvalue="on", offvalue="off")
+        self.compatibility_mode_check = customtkinter.CTkCheckBox(sync_mode_frame, text=self._("compatibility_mode_check"), variable=self.compatibility_mode_var, onvalue="on", offvalue="off")
         self.compatibility_mode_check.pack(side="left", padx=10)
         
         self.warning_label = customtkinter.CTkLabel(self.main_frame, text="", text_color="orange")
@@ -349,8 +384,14 @@ class App(customtkinter.CTk):
         self.start_sync_button = customtkinter.CTkButton(sync_frame, text=self._("start_sync_button"), command=self.start_synchronization_thread)
         self.start_sync_button.pack(pady=10)
         
+        self.progress_bar = customtkinter.CTkProgressBar(self.main_frame, orientation="horizontal")
+        self.progress_bar.set(0)
+        self.progress_bar.pack(pady=(5, 10), padx=10, fill="x")
         self.log_textbox = customtkinter.CTkTextbox(self.main_frame, height=200)
         self.log_textbox.pack(pady=10, padx=10, fill="both", expand=True)
+
+    def update_progress(self, value):
+        self.after(0, self.progress_bar.set, value)
 
     def select_csv_file(self):
         filepath = filedialog.askopenfilename(filetypes=(("Archivos CSV", "*.csv"), ("Todos los archivos", "*.*")))
@@ -486,13 +527,14 @@ class App(customtkinter.CTk):
 
     def start_synchronization_thread(self):
         if not self.is_syncing:
+            self.progress_bar.set(0)
             thread = threading.Thread(target=self.start_synchronization)
             thread.daemon = True
             thread.start()
 
     def finalize_sync(self, success=True):
-        """Función centralizada para terminar la sincronización y reactivar la UI."""
         if success:
+            self.update_progress(1.0)
             self.log("SUCCESS", "================================")
             self.log("SUCCESS", self._("log_sync_completed_success"))
             self.log("SUCCESS", "================================")
@@ -506,21 +548,20 @@ class App(customtkinter.CTk):
         self.on_sync_mode_change()
 
     def start_synchronization(self):
-        """Orquesta el proceso de sincronización, manejando hilos y diálogos."""
         self.is_syncing = True
         self.start_sync_button.configure(state="disabled", text=self._("syncing_button"))
         self.log_textbox.delete("1.0", "end")
         self.log("INFO", self._("log_sync_starting").format(mode=self.sync_mode.get().upper()))
-        
-        # Validaciones y carga de CSV
+
         if not self.csv_path:
             self.log("ERROR", self._("log_error_no_csv"))
-            self.finalize_sync(success=False)
+            self.finalize_sync(False)
             return
+
         user_mapping = {item['combo'].get(): item['csv_column'] for item in self.mapping_widgets if item['combo'].get() != self._("do_not_import")}
         if 'SKU' not in user_mapping:
             self.log("ERROR", self._("log_error_no_sku"))
-            self.finalize_sync(success=False)
+            self.finalize_sync(False)
             return
 
         try:
@@ -528,8 +569,19 @@ class App(customtkinter.CTk):
             self.log("INFO", self._("log_csv_loaded").format(count=len(df)))
         except Exception as e:
             self.log("ERROR", self._("log_fatal_csv_error").format(e=e))
-            self.finalize_sync(success=False)
+            self.finalize_sync(False)
             return
+
+        # NUEVO: validación de SKUs duplicados
+        sku_column_name = user_mapping.get('SKU')
+        if sku_column_name:
+            duplicated_skus = df[df.duplicated(subset=[sku_column_name], keep=False)]
+            if not duplicated_skus.empty:
+                self.log("WARN", "--------------------------------------------")
+                self.log("WARN", self._("warn_duplicate_skus_found"))
+                for sku in duplicated_skus[sku_column_name].unique():
+                    self.log("WARN", f"  - SKU: {sku}")
+                self.log("WARN", "--------------------------------------------")
 
         # Obtener productos de la tienda
         self.log("INFO", self._("log_getting_inventory"))
@@ -694,68 +746,52 @@ class App(customtkinter.CTk):
         products_to_create = []
         products_to_update = []
         
+        # 1. Preparar las listas de productos para crear y actualizar
         for index, row in df.iterrows():
-            sku = row.get(user_mapping['SKU'], '').strip()
-            if not sku: 
+            sku = row.get(user_mapping.get('SKU'), '').strip()
+            if not sku:
                 self.log("WARN", self._("log_warn_empty_sku").format(row=index + 2))
                 continue
             
+            # Lógica para construir el `product_data` a partir de la fila del CSV
             product_data = {'type': 'simple'}
             meta_data = []
             dimensions = {}
             
             for gui_field, csv_column in user_mapping.items():
                 value = row.get(csv_column, '')
-                if pd.isna(value) or value == '': 
-                    continue
+                if pd.isna(value) or value == '': continue
                 api_key = self.API_FIELD_MAP.get(gui_field)
                 if gui_field.startswith("meta:"):
-                    meta_key = gui_field.split(":", 1)[1].strip()
-                    if meta_key: 
-                        meta_data.append({'key': meta_key, 'value': value})
+                    meta_key = gui_field.split(":", 1)[1].strip().replace(']', '').replace('[', '')
+                    if meta_key: meta_data.append({'key': meta_key, 'value': value})
                 elif api_key in ['categories', 'tags']:
-                    if isinstance(value, str):
-                        product_data[api_key] = [{'name': item.strip()} for item in value.split(',')]
-                    elif isinstance(value, list):
-                        product_data[api_key] = [{'name': item} for item in value]
+                    product_data[api_key] = [{'name': item.strip()} for item in str(value).split(',')]
                 elif api_key in ['length', 'width', 'height']:
-                    try: 
-                        dimensions[api_key] = str(float(value))
-                    except (ValueError, TypeError): 
-                        dimensions[api_key] = '0'
+                    try: dimensions[api_key] = str(float(str(value).replace(',', '.')))
+                    except (ValueError, TypeError): dimensions[api_key] = '0'
                 elif api_key == 'images':
-                    if not self.image_folder_path: 
-                        continue
+                    if not self.image_folder_path: continue
                     image_ids = []
-                    for img_name in value.split(','):
+                    for img_name in str(value).split(','):
                         img_name = img_name.strip()
                         if img_name and not img_name.lower().startswith('http'):
                             image_path = os.path.join(self.image_folder_path, img_name)
                             uploaded = self.api_client.upload_image(image_path, img_name)
-                            if uploaded and 'id' in uploaded: 
-                                image_ids.append({'id': uploaded['id']})
-                            elif uploaded and 'error' in uploaded: 
-                                self.log("ERROR", f"Subiendo '{img_name}': {uploaded['error']}")
-                    if image_ids: 
-                        product_data['images'] = image_ids
+                            if uploaded and 'id' in uploaded: image_ids.append({'id': uploaded['id']})
+                            elif uploaded and 'error' in uploaded: self.log("ERROR", f"Subiendo '{img_name}': {uploaded['error']}")
+                    if image_ids: product_data['images'] = image_ids
                 elif api_key:
                     if api_key in ['regular_price', 'sale_price']:
-                        try: 
-                            product_data[api_key] = str(float(value))
-                        except (ValueError, TypeError): 
-                            product_data[api_key] = '0'
+                        try: product_data[api_key] = str(float(str(value).replace(',', '.')))
+                        except (ValueError, TypeError): product_data[api_key] = '0'
                     elif api_key == 'stock_quantity':
-                        try: 
-                            product_data[api_key] = int(float(value))
-                        except (ValueError, TypeError): 
-                            product_data[api_key] = 0
-                    else: 
-                        product_data[api_key] = value
+                        try: product_data[api_key] = int(float(str(value).replace(',', '.')))
+                        except (ValueError, TypeError): product_data[api_key] = 0
+                    else: product_data[api_key] = value
             
-            if dimensions: 
-                product_data['dimensions'] = dimensions
-            if meta_data: 
-                product_data['meta_data'] = meta_data
+            if dimensions: product_data['dimensions'] = dimensions
+            if meta_data: product_data['meta_data'] = meta_data
             
             if sku in sku_to_id_map:
                 product_data['id'] = sku_to_id_map[sku]
@@ -767,17 +803,55 @@ class App(customtkinter.CTk):
         self.log("INFO", self._("log_batch_create_ready").format(count=len(products_to_create)))
         self.log("INFO", self._("log_batch_update_ready").format(count=len(products_to_update)))
         
+        # 2. Procesar los lotes con la nueva lógica de feedback y progreso
+        total_chunks = len(list(chunks(products_to_create, 50))) + len(list(chunks(products_to_update, 50)))
+        chunk_count = 0
+
+        # Bucle para CREAR productos
         for chunk in chunks(products_to_create, 50):
             self.log("INFO", self._("log_batch_create_sending").format(count=len(chunk)))
             result = self.api_client.process_batch({'create': chunk})
-            if result and 'error' in result: 
-                self.log("ERROR", result['error'])
+            
+            # ## INICIO DE LA CORRECCIÓN CLAVE ##
+            if result and 'create' in result:
+                # Si la API devuelve la lista de creaciones, la recorremos
+                for item in result['create']:
+                    sku = item.get('sku', 'N/A')
+                    if item.get('error'):
+                        # Si este item específico tiene un error, lo logueamos
+                        self.log("ERROR", f"Creando SKU {sku}: {item['error']['message']}")
+                    else:
+                        # Si no hay error, logueamos el éxito
+                        self.log("SUCCESS", self._("log_success_product_created").format(sku=sku, id=item.get('id')))
+            elif result and 'error' in result:
+                # Si toda la petición falló, logueamos el error general
+                self.log("ERROR", f"Error en lote de creación: {result['error']}")
+            # ## FIN DE LA CORRECCIÓN CLAVE ##
+
+            chunk_count += 1
+            if total_chunks > 0:
+                self.update_progress(chunk_count / total_chunks)
         
+        # Bucle para ACTUALIZAR productos (con la misma lógica corregida)
         for chunk in chunks(products_to_update, 50):
             self.log("INFO", self._("log_batch_update_sending").format(count=len(chunk)))
             result = self.api_client.process_batch({'update': chunk})
-            if result and 'error' in result: 
-                self.log("ERROR", result['error'])
+            
+            # ## INICIO DE LA CORRECCIÓN CLAVE ##
+            if result and 'update' in result:
+                for item in result['update']:
+                    sku = item.get('sku', 'N/A')
+                    if item.get('error'):
+                        self.log("ERROR", f"Actualizando SKU {sku}: {item['error']['message']}")
+                    else:
+                        self.log("SUCCESS", self._("log_success_product_updated").format(sku=sku, id=item.get('id')))
+            elif result and 'error' in result:
+                self.log("ERROR", f"Error en lote de actualización: {result['error']}")
+            # ## FIN DE LA CORRECCIÓN CLAVE ##
+
+            chunk_count += 1
+            if total_chunks > 0:
+                self.update_progress(chunk_count / total_chunks)
 
 if __name__ == "__main__":
     app = App()
