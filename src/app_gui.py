@@ -812,7 +812,6 @@ class App(customtkinter.CTk):
             self.log("INFO", self._("log_batch_create_sending").format(count=len(chunk)))
             result = self.api_client.process_batch({'create': chunk})
             
-            # ## INICIO DE LA CORRECCIÓN CLAVE ##
             if result and 'create' in result:
                 # Si la API devuelve la lista de creaciones, la recorremos
                 for item in result['create']:
@@ -826,18 +825,16 @@ class App(customtkinter.CTk):
             elif result and 'error' in result:
                 # Si toda la petición falló, logueamos el error general
                 self.log("ERROR", f"Error en lote de creación: {result['error']}")
-            # ## FIN DE LA CORRECCIÓN CLAVE ##
 
             chunk_count += 1
             if total_chunks > 0:
                 self.update_progress(chunk_count / total_chunks)
         
-        # Bucle para ACTUALIZAR productos (con la misma lógica corregida)
+        # Bucle para ACTUALIZAR productos 
         for chunk in chunks(products_to_update, 50):
             self.log("INFO", self._("log_batch_update_sending").format(count=len(chunk)))
             result = self.api_client.process_batch({'update': chunk})
             
-            # ## INICIO DE LA CORRECCIÓN CLAVE ##
             if result and 'update' in result:
                 for item in result['update']:
                     sku = item.get('sku', 'N/A')
@@ -847,7 +844,6 @@ class App(customtkinter.CTk):
                         self.log("SUCCESS", self._("log_success_product_updated").format(sku=sku, id=item.get('id')))
             elif result and 'error' in result:
                 self.log("ERROR", f"Error en lote de actualización: {result['error']}")
-            # ## FIN DE LA CORRECCIÓN CLAVE ##
 
             chunk_count += 1
             if total_chunks > 0:
