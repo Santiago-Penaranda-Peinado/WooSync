@@ -7,6 +7,7 @@ import os
 import threading
 import json
 from api_client import WooCommerceAPI
+from product_payload import build_product_payload
 from queue import Queue
 
 customtkinter.set_appearance_mode("System")
@@ -47,6 +48,7 @@ class App(customtkinter.CTk):
                 "sync_mode_label": "Modo de Sincronización:",
                 "safe_mode_radio": "Modo Seguro (Crear y Actualizar)",
                 "mirror_mode_radio": "Modo Espejo (Sincronización Completa)",
+                "dry_run_mode_radio": "Dry Run (Solo Simulación)",
                 "compatibility_mode_check": "Modo Compatible (Lento y Seguro)",
                 "mirror_mode_warning": "¡ADVERTENCIA! El Modo Espejo eliminará permanentemente de la tienda\ntodos los productos que NO estén en tu archivo CSV.",
                 "start_sync_button": "Iniciar Sincronización",
@@ -98,7 +100,14 @@ class App(customtkinter.CTk):
                 "log_mapping_saved": "Mapeo guardado exitosamente en: {filepath}",
                 "log_mapping_loaded": "Mapeo cargado exitosamente desde: {filepath}",
                 "error_loading_mapping": "Error al cargar el archivo de mapeo. Asegúrate de que es un JSON válido.",
-                "warn_duplicate_skus_found": "¡ATENCIÓN! Se encontraron los siguientes SKUs duplicados en el CSV. Se procesará la última aparición de cada uno:"
+                "warn_duplicate_skus_found": "¡ATENCIÓN! Se encontraron los siguientes SKUs duplicados en el CSV. Se procesará la última aparición de cada uno:",
+                "dry_run_mode_info": "MODO DRY RUN: No se realizarán cambios en tu tienda.",
+                "dry_run_summary_title": "===== RESUMEN DRY RUN =====",
+                "dry_run_products_to_create": "Productos a CREAR: {count}",
+                "dry_run_products_to_update": "Productos a ACTUALIZAR: {count}",
+                "dry_run_products_to_delete": "Productos a ELIMINAR: {count}",
+                "dry_run_images_to_upload": "Imágenes a SUBIR: {count}",
+                "dry_run_completed": "DRY RUN COMPLETADO - Revisa el resumen anterior"
             },
             "en": {
                 "window_title": "WooSync v3.0 - WooCommerce Synchronizer",
@@ -125,6 +134,7 @@ class App(customtkinter.CTk):
                 "sync_mode_label": "Synchronization Mode:",
                 "safe_mode_radio": "Safe Mode (Create and Update)",
                 "mirror_mode_radio": "Mirror Mode (Full Synchronization)",
+                "dry_run_mode_radio": "Dry Run (Simulation Only)",
                 "compatibility_mode_check": "Compatibility Mode (Slow & Safe)",
                 "mirror_mode_warning": "WARNING! Mirror Mode will permanently delete all products from your store\nthat are NOT in your CSV file.",
                 "start_sync_button": "Start Synchronization",
@@ -176,7 +186,14 @@ class App(customtkinter.CTk):
                 "log_mapping_saved": "Mapping saved successfully to: {filepath}",
                 "log_mapping_loaded": "Mapping loaded successfully from: {filepath}",
                 "error_loading_mapping": "Error loading mapping file. Ensure it is a valid JSON.",
-                "warn_duplicate_skus_found": "WARNING! The following duplicate SKUs were found in the CSV. The last occurrence of each will be processed:"
+                "warn_duplicate_skus_found": "WARNING! The following duplicate SKUs were found in the CSV. The last occurrence of each will be processed:",
+                "dry_run_mode_info": "DRY RUN MODE: No changes will be made to your store.",
+                "dry_run_summary_title": "===== DRY RUN SUMMARY =====",
+                "dry_run_products_to_create": "Products to CREATE: {count}",
+                "dry_run_products_to_update": "Products to UPDATE: {count}",
+                "dry_run_products_to_delete": "Products to DELETE: {count}",
+                "dry_run_images_to_upload": "Images to UPLOAD: {count}",
+                "dry_run_completed": "DRY RUN COMPLETED - Review the summary above"
             }
         }
         
@@ -189,6 +206,7 @@ class App(customtkinter.CTk):
         self.mapping_widgets = []
         self.is_syncing = False
         self.log_queue = Queue()
+        self.image_cache = {}  # Cache simple para evitar re-subir imágenes ya procesadas
         self.API_FIELD_MAP = {"ID": "id", "Name": "name", "SKU": "sku", "Regular price": "regular_price", "Sale price": "sale_price", "Description": "description", "Short description": "short_description", "Stock": "stock_quantity", "Weight": "weight", "Length": "length", "Width": "width", "Height": "height", "Categories": "categories", "Tags": "tags", "Images": "images", "Purchase note": "purchase_note", "Menu order": "menu_order"}
         
         self.login_frame = customtkinter.CTkFrame(self)
@@ -230,6 +248,7 @@ class App(customtkinter.CTk):
             self.mode_label.configure(text=self._("sync_mode_label"))
             self.safe_radio.configure(text=self._("safe_mode_radio"))
             self.mirror_radio.configure(text=self._("mirror_mode_radio"))
+            self.dry_run_radio.configure(text=self._("dry_run_mode_radio"))
             self.compatibility_mode_check.configure(text=self._("compatibility_mode_check"))
             if not self.is_syncing:
                 self.start_sync_button.configure(text=self._("start_sync_button"))
@@ -372,6 +391,8 @@ class App(customtkinter.CTk):
         self.safe_radio.pack(side="left", padx=5)
         self.mirror_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("mirror_mode_radio"), variable=self.sync_mode, value="mirror", command=self.on_sync_mode_change)
         self.mirror_radio.pack(side="left", padx=5)
+        self.dry_run_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("dry_run_mode_radio"), variable=self.sync_mode, value="dry_run", command=self.on_sync_mode_change)
+        self.dry_run_radio.pack(side="left", padx=5)
         self.compatibility_mode_var = customtkinter.StringVar(value="off")
         self.compatibility_mode_check = customtkinter.CTkCheckBox(sync_mode_frame, text=self._("compatibility_mode_check"), variable=self.compatibility_mode_var, onvalue="on", offvalue="off")
         self.compatibility_mode_check.pack(side="left", padx=10)
@@ -511,6 +532,9 @@ class App(customtkinter.CTk):
         if self.sync_mode.get() == "mirror":
             self.warning_label.configure(text=self._("mirror_mode_warning"))
             self.start_sync_button.configure(fg_color="red", hover_color="darkred")
+        elif self.sync_mode.get() == "dry_run":
+            self.warning_label.configure(text=self._("dry_run_mode_info"), text_color="cyan")
+            self.start_sync_button.configure(fg_color=("#2B8C5A", "#1B5C3A"), hover_color=("#1F6D42", "#0F3D22"))
         else:
             self.warning_label.configure(text="")
             self.start_sync_button.configure(fg_color=("#3B8ED0", "#1F6AA5"), hover_color=("#36719F", "#144870"))
@@ -594,6 +618,11 @@ class App(customtkinter.CTk):
         store_sku_to_id_map = {prod['sku']: prod['id'] for prod in store_products if prod.get('sku')}
         self.log("INFO", self._("log_store_products_found").format(count=len(store_sku_to_id_map)))
 
+        # Lógica Modo Dry Run
+        if self.sync_mode.get() == "dry_run":
+            self.run_dry_run_simulation(df, user_mapping, store_sku_to_id_map)
+            return
+
         # Lógica Modo Espejo
         if self.sync_mode.get() == "mirror":
             csv_skus = set(df[user_mapping['SKU']].dropna().unique())
@@ -611,6 +640,91 @@ class App(customtkinter.CTk):
             self.log("INFO", self._("log_processing_batch"))
             self.process_products_batch(df, user_mapping, store_sku_to_id_map)
         self.finalize_sync()
+
+    def run_dry_run_simulation(self, df, user_mapping, store_sku_to_id_map):
+        """Simula la sincronización sin hacer cambios reales, mostrando resumen."""
+        self.log("INFO", "="*50)
+        self.log("INFO", self._("dry_run_summary_title"))
+        self.log("INFO", "="*50)
+        
+        csv_skus = set()
+        products_to_create = []
+        products_to_update = []
+        images_to_upload = set()
+        
+        for index, row in df.iterrows():
+            sku = row.get(user_mapping.get('SKU'), '').strip()
+            if not sku:
+                continue
+            csv_skus.add(sku)
+            
+            # Simular construcción de payload
+            product_data = build_product_payload(
+                row=row,
+                user_mapping=user_mapping,
+                api_field_map=self.API_FIELD_MAP,
+                image_folder_path=None,  # No subir imágenes en dry run
+                upload_image_func=None,
+                image_cache=None,
+                log=None
+            )
+            
+            # Detectar imágenes que se subirían
+            for gui_field, csv_column in user_mapping.items():
+                if self.API_FIELD_MAP.get(gui_field) == 'images':
+                    value = row.get(csv_column, '')
+                    if value and not pd.isna(value):
+                        for img_name in str(value).split(','):
+                            img_name = img_name.strip()
+                            if img_name and not img_name.lower().startswith('http'):
+                                images_to_upload.add(img_name)
+            
+            if sku in store_sku_to_id_map:
+                products_to_update.append(sku)
+            else:
+                products_to_create.append(sku)
+        
+        # Calcular productos a eliminar (solo en modo espejo)
+        products_to_delete = []
+        if self.sync_mode.get() == "mirror":
+            products_to_delete = list(set(store_sku_to_id_map.keys()) - csv_skus)
+        
+        # Mostrar resumen
+        self.log("SUCCESS", self._("dry_run_products_to_create").format(count=len(products_to_create)))
+        if products_to_create[:5]:
+            for sku in products_to_create[:5]:
+                self.log("INFO", f"  - {sku}")
+            if len(products_to_create) > 5:
+                self.log("INFO", f"  ... y {len(products_to_create) - 5} más")
+        
+        self.log("SUCCESS", self._("dry_run_products_to_update").format(count=len(products_to_update)))
+        if products_to_update[:5]:
+            for sku in products_to_update[:5]:
+                self.log("INFO", f"  - {sku}")
+            if len(products_to_update) > 5:
+                self.log("INFO", f"  ... y {len(products_to_update) - 5} más")
+        
+        if products_to_delete:
+            self.log("WARN", self._("dry_run_products_to_delete").format(count=len(products_to_delete)))
+            for sku in products_to_delete[:5]:
+                self.log("WARN", f"  - {sku}")
+            if len(products_to_delete) > 5:
+                self.log("WARN", f"  ... y {len(products_to_delete) - 5} más")
+        else:
+            self.log("INFO", self._("dry_run_products_to_delete").format(count=0))
+        
+        if self.image_folder_path:
+            self.log("INFO", self._("dry_run_images_to_upload").format(count=len(images_to_upload)))
+            if len(images_to_upload) > 0:
+                for img in list(images_to_upload)[:5]:
+                    self.log("INFO", f"  - {img}")
+                if len(images_to_upload) > 5:
+                    self.log("INFO", f"  ... y {len(images_to_upload) - 5} más")
+        
+        self.log("INFO", "="*50)
+        self.log("SUCCESS", self._("dry_run_completed"))
+        self.log("INFO", "="*50)
+        self.finalize_sync(success=True)
 
     def ask_for_deletion_confirmation(self, skus_to_delete, store_sku_to_id_map, df, user_mapping):
         """Muestra el diálogo y luego continúa el proceso en un nuevo hilo."""
@@ -658,75 +772,26 @@ class App(customtkinter.CTk):
 
         for index, row in df.iterrows():
             sku = row.get(user_mapping['SKU'], '').strip()
-            if not sku: 
+            if not sku:
                 self.log("WARN", self._("log_warn_empty_sku").format(row=index + 2))
                 continue
-            
-            # Preparar datos del producto
-            product_data = {'type': 'simple'}
-            meta_data = []
-            dimensions = {}
-            
-            for gui_field, csv_column in user_mapping.items():
-                value = row.get(csv_column, '')
-                if pd.isna(value) or value == '': 
-                    continue
-                api_key = self.API_FIELD_MAP.get(gui_field)
-                if gui_field.startswith("meta:"):
-                    meta_key = gui_field.split(":", 1)[1].strip()
-                    if meta_key: 
-                        meta_data.append({'key': meta_key, 'value': value})
-                elif api_key in ['categories', 'tags']:
-                    if isinstance(value, str):
-                        product_data[api_key] = [{'name': item.strip()} for item in value.split(',')]
-                    elif isinstance(value, list):
-                        product_data[api_key] = [{'name': item} for item in value]
-                elif api_key in ['length', 'width', 'height']:
-                    try: 
-                        dimensions[api_key] = str(float(value))
-                    except (ValueError, TypeError): 
-                        dimensions[api_key] = '0'
-                elif api_key == 'images':
-                    if not self.image_folder_path: 
-                        continue
-                    image_ids = []
-                    for img_name in value.split(','):
-                        img_name = img_name.strip()
-                        if img_name and not img_name.lower().startswith('http'):
-                            image_path = os.path.join(self.image_folder_path, img_name)
-                            uploaded = self.api_client.upload_image(image_path, img_name)
-                            if uploaded and 'id' in uploaded: 
-                                image_ids.append({'id': uploaded['id']})
-                            elif uploaded and 'error' in uploaded: 
-                                self.log("ERROR", f"Subiendo '{img_name}': {uploaded['error']}")
-                    if image_ids: 
-                        product_data['images'] = image_ids
-                elif api_key:
-                    if api_key in ['regular_price', 'sale_price']:
-                        try: 
-                            product_data[api_key] = str(float(value))
-                        except (ValueError, TypeError): 
-                            product_data[api_key] = '0'
-                    elif api_key == 'stock_quantity':
-                        try: 
-                            product_data[api_key] = int(float(value))
-                        except (ValueError, TypeError): 
-                            product_data[api_key] = 0
-                    else: 
-                        product_data[api_key] = value
-            
-            if dimensions: 
-                product_data['dimensions'] = dimensions
-            if meta_data: 
-                product_data['meta_data'] = meta_data
+
+            product_data = build_product_payload(
+                row=row,
+                user_mapping=user_mapping,
+                api_field_map=self.API_FIELD_MAP,
+                image_folder_path=self.image_folder_path,
+                upload_image_func=self.api_client.upload_image,
+                image_cache=self.image_cache,
+                log=self.log
+            )
 
             self.log("INFO", self._("log_processing_sku").format(current=index + 1, total=total_products, sku=sku))
 
-            # Lógica de envío individual
             if sku in sku_to_id_map:
                 product_id = sku_to_id_map[sku]
                 result = self.api_client.update_product(product_id, product_data)
-                if result and 'error' not in result: 
+                if result and 'error' not in result:
                     updated_count += 1
                     self.log("SUCCESS", self._("log_success_product_updated").format(sku=sku))
                 elif result and 'error' in result:
@@ -734,12 +799,12 @@ class App(customtkinter.CTk):
             else:
                 product_data['sku'] = sku
                 result = self.api_client.create_product(product_data)
-                if result and 'error' not in result: 
+                if result and 'error' not in result:
                     created_count += 1
                     self.log("SUCCESS", self._("log_success_product_created").format(sku=sku))
                 elif result and 'error' in result:
                     self.log("ERROR", self._("log_error_product_create").format(sku=sku, error=result['error']))
-    
+
         self.log("INFO", self._("log_process_summary").format(created=created_count, updated=updated_count))
 
     def process_products_batch(self, df, user_mapping, sku_to_id_map):
@@ -752,47 +817,17 @@ class App(customtkinter.CTk):
             if not sku:
                 self.log("WARN", self._("log_warn_empty_sku").format(row=index + 2))
                 continue
-            
-            # Lógica para construir el `product_data` a partir de la fila del CSV
-            product_data = {'type': 'simple'}
-            meta_data = []
-            dimensions = {}
-            
-            for gui_field, csv_column in user_mapping.items():
-                value = row.get(csv_column, '')
-                if pd.isna(value) or value == '': continue
-                api_key = self.API_FIELD_MAP.get(gui_field)
-                if gui_field.startswith("meta:"):
-                    meta_key = gui_field.split(":", 1)[1].strip().replace(']', '').replace('[', '')
-                    if meta_key: meta_data.append({'key': meta_key, 'value': value})
-                elif api_key in ['categories', 'tags']:
-                    product_data[api_key] = [{'name': item.strip()} for item in str(value).split(',')]
-                elif api_key in ['length', 'width', 'height']:
-                    try: dimensions[api_key] = str(float(str(value).replace(',', '.')))
-                    except (ValueError, TypeError): dimensions[api_key] = '0'
-                elif api_key == 'images':
-                    if not self.image_folder_path: continue
-                    image_ids = []
-                    for img_name in str(value).split(','):
-                        img_name = img_name.strip()
-                        if img_name and not img_name.lower().startswith('http'):
-                            image_path = os.path.join(self.image_folder_path, img_name)
-                            uploaded = self.api_client.upload_image(image_path, img_name)
-                            if uploaded and 'id' in uploaded: image_ids.append({'id': uploaded['id']})
-                            elif uploaded and 'error' in uploaded: self.log("ERROR", f"Subiendo '{img_name}': {uploaded['error']}")
-                    if image_ids: product_data['images'] = image_ids
-                elif api_key:
-                    if api_key in ['regular_price', 'sale_price']:
-                        try: product_data[api_key] = str(float(str(value).replace(',', '.')))
-                        except (ValueError, TypeError): product_data[api_key] = '0'
-                    elif api_key == 'stock_quantity':
-                        try: product_data[api_key] = int(float(str(value).replace(',', '.')))
-                        except (ValueError, TypeError): product_data[api_key] = 0
-                    else: product_data[api_key] = value
-            
-            if dimensions: product_data['dimensions'] = dimensions
-            if meta_data: product_data['meta_data'] = meta_data
-            
+
+            product_data = build_product_payload(
+                row=row,
+                user_mapping=user_mapping,
+                api_field_map=self.API_FIELD_MAP,
+                image_folder_path=self.image_folder_path,
+                upload_image_func=self.api_client.upload_image,
+                image_cache=self.image_cache,
+                log=self.log
+            )
+
             if sku in sku_to_id_map:
                 product_data['id'] = sku_to_id_map[sku]
                 products_to_update.append(product_data)
