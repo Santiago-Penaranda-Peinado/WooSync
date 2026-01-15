@@ -1108,6 +1108,6 @@ Ver archivo LICENSE para detalles.
 
 Desarrollado por Santiago Penaranda Peinado
 
-Versión: 3.1
+Versión: 3.2
 
 Fecha: Diciembre 2025
