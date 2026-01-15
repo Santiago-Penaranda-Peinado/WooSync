@@ -4,6 +4,7 @@ import customtkinter
 from tkinter import filedialog, simpledialog
 import pandas as pd
 import os
+import sys
 import threading
 import json
 from api_client import WooCommerceAPI
@@ -22,180 +23,43 @@ class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
         
-        self.translations = {
-            "es": {
-                "window_title": "WooSync v3.0 - Sincronizador para WooCommerce",
-                "connect_to_store": "Conectar a la Tienda",
-                "store_url_placeholder": "URL de la tienda (https://...)",
-                "username_placeholder": "Nombre de Usuario de WordPress",
-                "app_password_placeholder": "Contraseña de Aplicación",
-                "connect_button": "Conectar",
-                "connecting_status": "Conectando...",
-                "error_all_fields_required": "Todos los campos son obligatorios.",
-                "error_connection_failed": "Error: Revisa la URL y las credenciales.",
-                "starting_from_scratch": "¿Empezando desde cero?",
-                "download_template_button": "Descargar Plantilla Mejorada",
-                "already_have_file": "¿Ya tienes un archivo?",
-                "select_csv_button": "Seleccionar Archivo CSV",
-                "step2_images_label": "Paso 2: Selecciona la carpeta de imágenes (Opcional)",
-                "select_images_folder_button": "Seleccionar Carpeta de Imágenes",
-                "mapping_presets_label": "Plantillas de Mapeo Rápido:",
-                "basic_preset_button": "Básico",
-                "map_all_preset_button": "Mapear Todo",
-                "clear_all_preset_button": "Limpiar Todo",
-                "step3_mapping_label": "Paso 3: Mapea las columnas",
-                "step3_mapping_label_with_count": "Paso 3: Mapea las {count} columnas",
-                "sync_mode_label": "Modo de Sincronización:",
-                "safe_mode_radio": "Modo Seguro (Crear y Actualizar)",
-                "mirror_mode_radio": "Modo Espejo (Sincronización Completa)",
-                "dry_run_mode_radio": "Dry Run (Solo Simulación)",
-                "compatibility_mode_check": "Modo Compatible (Lento y Seguro)",
-                "mirror_mode_warning": "¡ADVERTENCIA! El Modo Espejo eliminará permanentemente de la tienda\ntodos los productos que NO estén en tu archivo CSV.",
-                "start_sync_button": "Iniciar Sincronización",
-                "syncing_button": "Sincronizando...",
-                "csv_file_label": "Archivo: {filename}",
-                "image_folder_label": "Carpeta: {folderpath}",
-                "do_not_import": "No importar",
-                "meta_field_template": "meta: [Escribe el nombre del campo]",
-                "log_applying_basic_mapping": "Aplicando plantilla de mapeo 'Básico'...",
-                "log_clearing_mapping": "Limpiando todo el mapeo...",
-                "log_applying_full_mapping": "Intentando mapear todas las columnas automáticamente...",
-                "log_creating_template": "Creando plantilla mejorada...",
-                "save_template_dialog_title": "Guardar plantilla como...",
-                "log_template_saved": "Plantilla guardada exitosamente en: {filepath}",
-                "log_template_save_error": "Error al guardar la plantilla: {e}",
-                "log_sync_starting": "INICIANDO SINCRONIZACIÓN EN MODO: {mode}",
-                "log_error_no_csv": "Debes seleccionar un archivo CSV.",
-                "log_error_no_sku": "El campo 'SKU' es obligatorio.",
-                "log_csv_loaded": "Archivo CSV cargado. Contiene {count} productos.",
-                "log_fatal_csv_error": "Error fatal al leer el CSV: {e}",
-                "log_getting_inventory": "Obteniendo inventario actual de la tienda...",
-                "log_store_products_found": "Se encontraron {count} productos con SKU en la tienda.",
-                "delete_confirmation_dialog_title": "CONFIRMACIÓN DE ELIMINACIÓN PERMANENTE",
-                "delete_confirmation_dialog_text": "Estás a punto de ELIMINAR PERMANENTEMENTE {count} productos.\nEsta acción no se puede deshacer.\n\nPara confirmar, escribe 'ELIMINAR' en mayúsculas:",
-                "delete_confirmation_keyword": "ELIMINAR",
-                "log_mirror_sync_continue": "Confirmación recibida. Eliminando {count} productos por lotes...",
-                "log_mirror_sync_delete_batch": "Enviando lote de ELIMINACIÓN de {count} productos...",
-                "log_mirror_sync_cancelled": "Eliminación cancelada por el usuario.",
-                "log_processing_compatible": "Iniciando procesamiento en Modo Compatible (uno por uno)...",
-                "log_processing_batch": "Iniciando procesamiento en Modo Rápido (por lotes)...",
-                "log_sync_completed_success": "SINCRONIZACIÓN COMPLETADA",
-                "log_sync_aborted_error": "SINCRONIZACIÓN ABORTADA POR ERRORES",
-                "log_processing_sku": "({current}/{total}) Procesando SKU: {sku}",
-                "log_warn_empty_sku": "Fila {row}: Omitida (SKU vacío).",
-                "log_success_product_updated": "Producto Actualizado: {sku} (ID: {id})",
-                "log_error_product_update": "Error al actualizar {sku}: {error}",
-                "log_success_product_created": "Producto Creado: {sku} (ID: {id})",
-                "log_error_product_create": "Error al crear {sku}: {error}",
-                "log_batch_create_ready": "Preparado para crear: {count} productos.",
-                "log_batch_update_ready": "Preparado para actualizar: {count} productos.",
-                "log_batch_create_sending": "Enviando lote de CREACIÓN de {count} productos...",
-                "log_batch_update_sending": "Enviando lote de ACTUALIZACIÓN de {count} productos...",
-                "log_process_summary": "Proceso completado. Creados: {created}, Actualizados: {updated}.",
-                "language_toggle_button": "EN/ES",
-                "save_mapping_button": "Guardar Mapeo",
-                "load_mapping_button": "Cargar Mapeo",
-                "warn_no_mapping_to_save": "No hay un mapeo activo para guardar.",
-                "warn_load_csv_first": "Por favor, carga un archivo CSV antes de cargar un mapeo.",
-                "log_mapping_saved": "Mapeo guardado exitosamente en: {filepath}",
-                "log_mapping_loaded": "Mapeo cargado exitosamente desde: {filepath}",
-                "error_loading_mapping": "Error al cargar el archivo de mapeo. Asegúrate de que es un JSON válido.",
-                "warn_duplicate_skus_found": "¡ATENCIÓN! Se encontraron los siguientes SKUs duplicados en el CSV. Se procesará la última aparición de cada uno:",
-                "dry_run_mode_info": "MODO DRY RUN: No se realizarán cambios en tu tienda.",
-                "dry_run_summary_title": "===== RESUMEN DRY RUN =====",
-                "dry_run_products_to_create": "Productos a CREAR: {count}",
-                "dry_run_products_to_update": "Productos a ACTUALIZAR: {count}",
-                "dry_run_products_to_delete": "Productos a ELIMINAR: {count}",
-                "dry_run_images_to_upload": "Imágenes a SUBIR: {count}",
-                "dry_run_completed": "DRY RUN COMPLETADO - Revisa el resumen anterior"
-            },
-            "en": {
-                "window_title": "WooSync v3.0 - WooCommerce Synchronizer",
-                "connect_to_store": "Connect to Store",
-                "store_url_placeholder": "Store URL (https://...)",
-                "username_placeholder": "WordPress Username",
-                "app_password_placeholder": "Application Password",
-                "connect_button": "Connect",
-                "connecting_status": "Connecting...",
-                "error_all_fields_required": "All fields are required.",
-                "error_connection_failed": "Error: Check URL and credentials.",
-                "starting_from_scratch": "Starting from scratch?",
-                "download_template_button": "Download Enhanced Template",
-                "already_have_file": "Already have a file?",
-                "select_csv_button": "Select CSV File",
-                "step2_images_label": "Step 2: Select the image folder (Optional)",
-                "select_images_folder_button": "Select Image Folder",
-                "mapping_presets_label": "Quick Mapping Presets:",
-                "basic_preset_button": "Basic",
-                "map_all_preset_button": "Map All",
-                "clear_all_preset_button": "Clear All",
-                "step3_mapping_label": "Step 3: Map the columns",
-                "step3_mapping_label_with_count": "Step 3: Map the {count} columns",
-                "sync_mode_label": "Synchronization Mode:",
-                "safe_mode_radio": "Safe Mode (Create and Update)",
-                "mirror_mode_radio": "Mirror Mode (Full Synchronization)",
-                "dry_run_mode_radio": "Dry Run (Simulation Only)",
-                "compatibility_mode_check": "Compatibility Mode (Slow & Safe)",
-                "mirror_mode_warning": "WARNING! Mirror Mode will permanently delete all products from your store\nthat are NOT in your CSV file.",
-                "start_sync_button": "Start Synchronization",
-                "syncing_button": "Syncing...",
-                "csv_file_label": "File: {filename}",
-                "image_folder_label": "Folder: {folderpath}",
-                "do_not_import": "Do not import",
-                "meta_field_template": "meta: [Enter field name]",
-                "log_applying_basic_mapping": "Applying 'Basic' mapping preset...",
-                "log_clearing_mapping": "Clearing all mapping...",
-                "log_applying_full_mapping": "Attempting to auto-map all columns...",
-                "log_creating_template": "Creating enhanced template...",
-                "save_template_dialog_title": "Save template as...",
-                "log_template_saved": "Template saved successfully to: {filepath}",
-                "log_template_save_error": "Error saving template: {e}",
-                "log_sync_starting": "STARTING SYNC IN MODE: {mode}",
-                "log_error_no_csv": "You must select a CSV file.",
-                "log_error_no_sku": "The 'SKU' field is mandatory.",
-                "log_csv_loaded": "CSV file loaded. Contains {count} products.",
-                "log_fatal_csv_error": "Fatal error reading CSV: {e}",
-                "log_getting_inventory": "Getting current store inventory...",
-                "log_store_products_found": "Found {count} products with SKU in the store.",
-                "delete_confirmation_dialog_title": "PERMANENT DELETION CONFIRMATION",
-                "delete_confirmation_dialog_text": "You are about to PERMANENTLY DELETE {count} products.\nThis action cannot be undone.\n\nTo confirm, type 'DELETE' in all caps:",
-                "log_mirror_sync_continue": "Confirmation received. Deleting {count} products in batches...",
-                "log_mirror_sync_delete_batch": "Sending DELETE batch of {count} products...",
-                "log_mirror_sync_cancelled": "Deletion cancelled by user.",
-                "log_processing_compatible": "Starting processing in Compatibility Mode (one by one)...",
-                "log_processing_batch": "Starting processing in Fast Mode (batch processing)...",
-                "log_sync_completed_success": "SYNCHRONIZATION COMPLETED",
-                "log_sync_aborted_error": "SYNCHRONIZATION ABORTED DUE TO ERRORS",
-                "log_processing_sku": "({current}/{total}) Processing SKU: {sku}",
-                "log_warn_empty_sku": "Row {row}: Skipped (empty SKU).",
-                "log_success_product_updated": "Product updated: {sku}",
-                "log_error_product_update": "Error updating {sku}: {error}",
-                "log_success_product_created": "Product created: {sku}",
-                "log_error_product_create": "Error creating {sku}: {error}",
-                "log_batch_create_ready": "Prepared to create: {count} products.",
-                "log_batch_update_ready": "Prepared to update: {count} products.",
-                "log_batch_create_sending": "Sending CREATE batch of {count} products...",
-                "log_batch_update_sending": "Sending UPDATE batch of {count} products...",
-                "delete_confirmation_keyword": "DELETE",
-                "log_process_summary": "Process completed. Created: {created}, Updated: {updated}.",
-                "language_toggle_button": "EN/ES",
-                "save_mapping_button": "Save Mapping",
-                "load_mapping_button": "Load Mapping",
-                "warn_no_mapping_to_save": "There is no active mapping to save.",
-                "warn_load_csv_first": "Please load a CSV file before loading a mapping.",
-                "log_mapping_saved": "Mapping saved successfully to: {filepath}",
-                "log_mapping_loaded": "Mapping loaded successfully from: {filepath}",
-                "error_loading_mapping": "Error loading mapping file. Ensure it is a valid JSON.",
-                "warn_duplicate_skus_found": "WARNING! The following duplicate SKUs were found in the CSV. The last occurrence of each will be processed:",
-                "dry_run_mode_info": "DRY RUN MODE: No changes will be made to your store.",
-                "dry_run_summary_title": "===== DRY RUN SUMMARY =====",
-                "dry_run_products_to_create": "Products to CREATE: {count}",
-                "dry_run_products_to_update": "Products to UPDATE: {count}",
-                "dry_run_products_to_delete": "Products to DELETE: {count}",
-                "dry_run_images_to_upload": "Images to UPLOAD: {count}",
-                "dry_run_completed": "DRY RUN COMPLETED - Review the summary above"
+        self.translations = {}
+        self.load_translations()
+        
+    def load_translations(self):
+        """Carga las traducciones desde archivos JSON externos ubicados en la carpeta 'locales'."""
+        # Detectar si estamos corriendo como exe empaquetado o en desarrollo
+        if getattr(sys, 'frozen', False):
+            # Corriendo como ejecutable empaquetado
+            base_path = sys._MEIPASS
+        else:
+            # Corriendo en desarrollo
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        locales_dir = os.path.join(base_path, 'locales')
+        
+        # Asegurarse de que la carpeta locales exista
+        if not os.path.exists(locales_dir):
+            print(f"ADVERTENCIA: No se encontró la carpeta 'locales' en: {locales_dir}")
+            # Fallback a traducciones mínimas en español
+            self.translations = {
+                "es": {"window_title": "WooSync v3.2", "connect_to_store": "Conectar a la Tienda"},
+                "en": {"window_title": "WooSync v3.2", "connect_to_store": "Connect to Store"}
             }
-        }
+            return
+
+        for lang in ['es', 'en']:
+            file_path = os.path.join(locales_dir, f'{lang}.json')
+            try:
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        self.translations[lang] = json.load(f)
+                else:
+                    print(f"ADVERTENCIA: Archivo de traducción no encontrado: {file_path}")
+                    self.translations[lang] = {}
+            except Exception as e:
+                print(f"ERROR: Fallo al cargar traducción {lang}: {e}")
+                self.translations[lang] = {}
         
         self.language = "es"
         self.title(self._("window_title"))
@@ -210,7 +74,7 @@ class App(customtkinter.CTk):
         self.API_FIELD_MAP = {"ID": "id", "Name": "name", "SKU": "sku", "Regular price": "regular_price", "Sale price": "sale_price", "Description": "description", "Short description": "short_description", "Stock": "stock_quantity", "Weight": "weight", "Length": "length", "Width": "width", "Height": "height", "Categories": "categories", "Tags": "tags", "Images": "images", "Purchase note": "purchase_note", "Menu order": "menu_order"}
         
         self.login_frame = customtkinter.CTkFrame(self)
-        self.main_frame = customtkinter.CTkFrame(self)
+        self.main_frame = customtkinter.CTkScrollableFrame(self)
         
         self.create_login_widgets()
         self.login_frame.pack(padx=20, pady=20, fill="both", expand=True)
@@ -237,7 +101,23 @@ class App(customtkinter.CTk):
         if hasattr(self, 'template_label') and self.main_frame.winfo_ismapped():
             self.template_label.configure(text=self._("starting_from_scratch"))
             self.template_button.configure(text=self._("download_template_button"))
+            
+            # Logic for Upload Label
+            if self.csv_path:
+                filename = os.path.basename(self.csv_path)
+                self.upload_label.configure(text=self._("csv_file_label").format(filename=filename))
+            else:
+                self.upload_label.configure(text=self._("already_have_file"))
+            
+            self.export_button.configure(text=self._("export_csv_button"))
             self.csv_button.configure(text=self._("select_csv_button"))
+            
+            # Logic for Image Folder Label
+            if self.image_folder_path:
+                self.image_folder_label.configure(text=self._("image_folder_label").format(folderpath=self.image_folder_path))
+            else:
+                self.image_folder_label.configure(text=self._("step2_images_label"))
+
             self.image_button.configure(text=self._("select_images_folder_button"))
             self.presets_label.configure(text=self._("mapping_presets_label"))
             self.basic_button.configure(text=self._("basic_preset_button"))
@@ -245,13 +125,24 @@ class App(customtkinter.CTk):
             self.clear_button.configure(text=self._("clear_all_preset_button"))
             self.save_mapping_button.configure(text=self._("save_mapping_button"))
             self.load_mapping_button.configure(text=self._("load_mapping_button"))
+            
+            # Logic for Mapping Frame Label
+            if self.mapping_widgets:
+                self.mapping_frame.configure(label_text=self._("step3_mapping_label_with_count").format(count=len(self.mapping_widgets)))
+            else:
+                self.mapping_frame.configure(label_text=self._("step3_mapping_label"))
+
             self.mode_label.configure(text=self._("sync_mode_label"))
             self.safe_radio.configure(text=self._("safe_mode_radio"))
             self.mirror_radio.configure(text=self._("mirror_mode_radio"))
             self.dry_run_radio.configure(text=self._("dry_run_mode_radio"))
             self.compatibility_mode_check.configure(text=self._("compatibility_mode_check"))
+            
             if not self.is_syncing:
                 self.start_sync_button.configure(text=self._("start_sync_button"))
+            else:
+                 self.start_sync_button.configure(text=self._("syncing_button"))
+
             self.lang_toggle_button_main.configure(text=self._("language_toggle_button"))
             self.on_sync_mode_change()
 
@@ -350,7 +241,11 @@ class App(customtkinter.CTk):
         self.template_label = customtkinter.CTkLabel(template_frame, text=self._("starting_from_scratch"))
         self.template_label.pack()
         self.template_button = customtkinter.CTkButton(template_frame, text=self._("download_template_button"), command=self.download_template)
+        self.template_button = customtkinter.CTkButton(template_frame, text=self._("download_template_button"), command=self.download_template)
         self.template_button.pack(pady=5)
+        
+        self.export_button = customtkinter.CTkButton(template_frame, text=self._("export_csv_button"), command=self.export_products_thread, fg_color="#2B8C5A", hover_color="#1F6D42")
+        self.export_button.pack(pady=5)
         
         upload_frame = customtkinter.CTkFrame(file_frame)
         upload_frame.pack(side="left", padx=20, pady=10, expand=True)
@@ -364,38 +259,59 @@ class App(customtkinter.CTk):
         self.image_button = customtkinter.CTkButton(self.main_frame, text=self._("select_images_folder_button"), command=self.select_image_folder)
         self.image_button.pack(pady=5)
         
-        presets_frame = customtkinter.CTkFrame(self.main_frame)
-        presets_frame.pack(pady=5, padx=10, fill="x")
-        self.presets_label = customtkinter.CTkLabel(presets_frame, text=self._("mapping_presets_label"))
-        self.presets_label.pack(side="left", padx=10)
-        self.basic_button = customtkinter.CTkButton(presets_frame, text=self._("basic_preset_button"), command=self.apply_basic_mapping)
+        # --- Frame de Presets (Centrado y Organizado) ---
+        presets_frame = customtkinter.CTkFrame(self.main_frame, fg_color="transparent")
+        presets_frame.pack(pady=10, padx=10, fill="x")
+        
+        # Fila 1: Etiqueta (Centrada)
+        self.presets_label = customtkinter.CTkLabel(presets_frame, text=self._("mapping_presets_label"), font=("Arial", 12, "bold"))
+        self.presets_label.pack(pady=(0, 5))
+        
+        # Fila 2: Botones de Acción (Centrados)
+        action_buttons_frame = customtkinter.CTkFrame(presets_frame, fg_color="transparent")
+        action_buttons_frame.pack(pady=2)
+        self.basic_button = customtkinter.CTkButton(action_buttons_frame, text=self._("basic_preset_button"), command=self.apply_basic_mapping, width=120)
         self.basic_button.pack(side="left", padx=5)
-        self.full_button = customtkinter.CTkButton(presets_frame, text=self._("map_all_preset_button"), command=self.apply_full_mapping)
+        self.full_button = customtkinter.CTkButton(action_buttons_frame, text=self._("map_all_preset_button"), command=self.apply_full_mapping, width=120)
         self.full_button.pack(side="left", padx=5)
-        self.clear_button = customtkinter.CTkButton(presets_frame, text=self._("clear_all_preset_button"), command=self.clear_mapping)
+        self.clear_button = customtkinter.CTkButton(action_buttons_frame, text=self._("clear_all_preset_button"), command=self.clear_mapping, width=120, fg_color="#C0392B", hover_color="#922B21")
         self.clear_button.pack(side="left", padx=5)
-        self.save_mapping_button = customtkinter.CTkButton(presets_frame, text=self._("save_mapping_button"), command=self.save_mapping)
-        self.save_mapping_button.pack(side="left", padx=(20, 5))
-        self.load_mapping_button = customtkinter.CTkButton(presets_frame, text=self._("load_mapping_button"), command=self.load_mapping)
+        
+        # Fila 3: Guardar/Cargar (Centrados)
+        file_buttons_frame = customtkinter.CTkFrame(presets_frame, fg_color="transparent")
+        file_buttons_frame.pack(pady=5)
+        self.save_mapping_button = customtkinter.CTkButton(file_buttons_frame, text=self._("save_mapping_button"), command=self.save_mapping, width=120)
+        self.save_mapping_button.pack(side="left", padx=5)
+        self.load_mapping_button = customtkinter.CTkButton(file_buttons_frame, text=self._("load_mapping_button"), command=self.load_mapping, width=120)
         self.load_mapping_button.pack(side="left", padx=5)
 
-        self.mapping_frame = customtkinter.CTkScrollableFrame(self.main_frame, label_text=self._("step3_mapping_label"))
-        self.mapping_frame.pack(pady=10, padx=10, fill="both", expand=True)
+        self.mapping_frame = customtkinter.CTkScrollableFrame(self.main_frame, label_text=self._("step3_mapping_label"), height=250)
+        self.mapping_frame.pack(pady=10, padx=10, fill="both")
         
+        # --- Frame de Modo de Sincronización (Centrado) ---
         sync_mode_frame = customtkinter.CTkFrame(self.main_frame)
         sync_mode_frame.pack(pady=10, padx=10, fill="x")
-        self.mode_label = customtkinter.CTkLabel(sync_mode_frame, text=self._("sync_mode_label"))
-        self.mode_label.pack(side="left", padx=10)
+        
+        # Fila 1: Etiqueta
+        self.mode_label = customtkinter.CTkLabel(sync_mode_frame, text=self._("sync_mode_label"), font=("Arial", 12, "bold"))
+        self.mode_label.pack(pady=(10, 5))
+        
+        # Fila 2: Radio Buttons
+        radios_frame = customtkinter.CTkFrame(sync_mode_frame, fg_color="transparent")
+        radios_frame.pack(pady=5)
+        
         self.sync_mode = customtkinter.StringVar(value="safe")
-        self.safe_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("safe_mode_radio"), variable=self.sync_mode, value="safe", command=self.on_sync_mode_change)
-        self.safe_radio.pack(side="left", padx=5)
-        self.mirror_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("mirror_mode_radio"), variable=self.sync_mode, value="mirror", command=self.on_sync_mode_change)
-        self.mirror_radio.pack(side="left", padx=5)
-        self.dry_run_radio = customtkinter.CTkRadioButton(sync_mode_frame, text=self._("dry_run_mode_radio"), variable=self.sync_mode, value="dry_run", command=self.on_sync_mode_change)
-        self.dry_run_radio.pack(side="left", padx=5)
+        self.safe_radio = customtkinter.CTkRadioButton(radios_frame, text=self._("safe_mode_radio"), variable=self.sync_mode, value="safe", command=self.on_sync_mode_change)
+        self.safe_radio.pack(side="left", padx=15)
+        self.mirror_radio = customtkinter.CTkRadioButton(radios_frame, text=self._("mirror_mode_radio"), variable=self.sync_mode, value="mirror", command=self.on_sync_mode_change)
+        self.mirror_radio.pack(side="left", padx=15)
+        self.dry_run_radio = customtkinter.CTkRadioButton(radios_frame, text=self._("dry_run_mode_radio"), variable=self.sync_mode, value="dry_run", command=self.on_sync_mode_change)
+        self.dry_run_radio.pack(side="left", padx=15)
+        
+        # Fila 3: Compatibilidad (Centrado debajo de radios)
         self.compatibility_mode_var = customtkinter.StringVar(value="off")
         self.compatibility_mode_check = customtkinter.CTkCheckBox(sync_mode_frame, text=self._("compatibility_mode_check"), variable=self.compatibility_mode_var, onvalue="on", offvalue="off")
-        self.compatibility_mode_check.pack(side="left", padx=10)
+        self.compatibility_mode_check.pack(pady=(5, 10))
         
         self.warning_label = customtkinter.CTkLabel(self.main_frame, text="", text_color="orange")
         self.warning_label.pack(pady=5, padx=10)
@@ -422,7 +338,11 @@ class App(customtkinter.CTk):
         filename = os.path.basename(filepath)
         self.upload_label.configure(text=self._("csv_file_label").format(filename=filename))
         try:
-            df_headers = pd.read_csv(self.csv_path, nrows=0).columns.tolist()
+            # Intentar UTF-8 primero, luego Latin-1 (común en Excel de Windows)
+            try:
+                df_headers = pd.read_csv(self.csv_path, nrows=0, encoding='utf-8').columns.tolist()
+            except UnicodeDecodeError:
+                df_headers = pd.read_csv(self.csv_path, nrows=0, encoding='latin-1').columns.tolist()
             self.create_mapping_widgets(df_headers)
         except Exception as e:
             self.log("ERROR", f"Error al leer el CSV: {e}")
@@ -528,6 +448,85 @@ class App(customtkinter.CTk):
             except Exception as e:
                 self.log("ERROR", self._("log_template_save_error").format(e=e))
 
+    def export_products_thread(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("Archivos CSV", "*.csv")],
+            title=self._("export_csv_button"),
+            initialfile="productos_exportados.csv"
+        )
+        if not filepath:
+            return
+
+        thread = threading.Thread(target=self.export_products, args=(filepath,))
+        thread.daemon = True
+        thread.start()
+
+    def export_products(self, filepath):
+        if not self.api_client:
+            self.log("ERROR", self._("error_connection_failed"))
+            return
+
+        self.log("INFO", self._("log_export_starting"))
+        try:
+            # 1. Obtener todos los productos
+            products = self.api_client.get_all_products()
+            
+            # 2. Aplanar datos para CSV
+            flattened_products = []
+            for p in products:
+                # Convertir listas a strings separados por coma
+                categories = ", ".join([c['name'] for c in p.get('categories', [])])
+                tags = ", ".join([t['name'] for t in p.get('tags', [])])
+                images = ", ".join([i['src'] for i in p.get('images', [])])
+                
+                # Extraer dimensiones
+                dims = p.get('dimensions', {})
+                
+                # Extraer meta data
+                meta_fields = {}
+                for m in p.get('meta_data', []):
+                    # Solo exportamos meta keys que no sean "privadas" (empiezan con _)
+                    if not m['key'].startswith('_'):
+                        meta_fields[f"meta: {m['key']}"] = m['value']
+
+                item = {
+                    'ID': p.get('id'),
+                    'Name': p.get('name'),
+                    'SKU': p.get('sku'),
+                    'Regular price': p.get('regular_price'),
+                    'Sale price': p.get('sale_price'),
+                    'Description': p.get('description'),
+                    'Short description': p.get('short_description'),
+                    'Stock': p.get('stock_quantity'),
+                    'Weight': p.get('weight'),
+                    'Length': dims.get('length'),
+                    'Width': dims.get('width'),
+                    'Height': dims.get('height'),
+                    'Categories': categories,
+                    'Tags': tags,
+                    'Images': images,
+                    **meta_fields # Añadir campos meta dinámicos
+                }
+                flattened_products.append(item)
+
+            # 3. Guardar con Pandas
+            df = pd.DataFrame(flattened_products)
+            
+            # Reordenar columnas para que las importantes estén primero
+            first_cols = ['ID', 'SKU', 'Name', 'Regular price', 'Sale price', 'Stock']
+            existing_cols = [c for c in first_cols if c in df.columns]
+            other_cols = [c for c in df.columns if c not in first_cols]
+            df = df[existing_cols + other_cols]
+
+            df.to_csv(filepath, index=False, encoding='utf-8-sig')  # BOM para Excel
+            self.log("SUCCESS", self._("log_export_success").format(filepath=filepath))
+            
+        except PermissionError:
+            self.log("ERROR", f"No se puede escribir el archivo. Asegúrate de que no esté abierto en Excel u otra aplicación: {filepath}")
+        except Exception as e:
+            self.log("ERROR", self._("log_export_error").format(e=e))
+
     def on_sync_mode_change(self):
         if self.sync_mode.get() == "mirror":
             self.warning_label.configure(text=self._("mirror_mode_warning"))
@@ -589,7 +588,12 @@ class App(customtkinter.CTk):
             return
 
         try:
-            df = pd.read_csv(self.csv_path, dtype=str).fillna('')
+            # Intentar UTF-8 primero, luego Latin-1 (común en Excel de Windows)
+            try:
+                df = pd.read_csv(self.csv_path, dtype=str, encoding='utf-8').fillna('')
+            except UnicodeDecodeError:
+                self.log("INFO", "CSV no está en UTF-8, intentando con Latin-1...")
+                df = pd.read_csv(self.csv_path, dtype=str, encoding='latin-1').fillna('')
             self.log("INFO", self._("log_csv_loaded").format(count=len(df)))
         except Exception as e:
             self.log("ERROR", self._("log_fatal_csv_error").format(e=e))
